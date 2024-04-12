@@ -10,6 +10,6 @@ except ImportError:
 
 def PackageName():  # pylint: disable=invalid-name
     """This is needed for backward compatibility because mantid workbench does "from shiver import Shiver" """
-    from .packagenamepy import PackageName as packagename  # pylint: disable=import-outside-toplevel
+    from .pyoncatqt import PackageName as packagename  # pylint: disable=import-outside-toplevel
 
     return packagename()

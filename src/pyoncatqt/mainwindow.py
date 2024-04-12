@@ -2,13 +2,12 @@
 Main Qt window
 """
 
-from qtpy.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget, QTabWidget, QPushButton
+from qtpy.QtWidgets import QHBoxLayout, QPushButton, QTabWidget, QVBoxLayout, QWidget
 
-from packagenamepy.home.home_view import Home
-from packagenamepy.home.home_model import HomeModel
-from packagenamepy.home.home_presenter import HomePresenter
-
-from packagenamepy.help.help_model import help_function
+from pyoncatqt.help.help_model import help_function
+from pyoncatqt.home.home_model import HomeModel
+from pyoncatqt.home.home_presenter import HomePresenter
+from pyoncatqt.home.home_view import Home
 
 
 class MainWindow(QWidget):

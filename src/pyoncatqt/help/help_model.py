@@ -1,6 +1,8 @@
-""" single help module """
+"""single help module"""
+
 import webbrowser
-from packagenamepy.configuration import get_data
+
+from pyoncatqt.configuration import get_data
 
 
 def help_function(context):
