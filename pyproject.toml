@@ -35,18 +35,20 @@ exclude = ["tests*", "docs*"]
 [tool.setuptools.package-data]
 "*" = ["*.yml","*.yaml","*.ini"]
 
-# TODO: Define once the package is ready for distribution
-#[project.scripts]
-#packagename-cli = "packagenamepy.packagename:main"
-
-#[project.gui-scripts]
-#packagenamepy = "packagenamepy.packagename:gui"
+[project.gui-scripts]
+pyoncatqt = "pyoncatqt.pyoncatqt:gui"
 
 [tool.pytest.ini_options]
-pythonpath = [".", "src", "scripts"]
+pythonpath = [".", "src"]
 testpaths = ["tests"]
 python_files = ["test*.py"]
 norecursedirs = [".git", "tmp*", "_tmp*", "__pycache__", "*dataset*", "*data_set*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "except ImportError:",
+    "except ModuleNotFoundError:",
+]
 
 [tool.ruff]
 line-length = 120

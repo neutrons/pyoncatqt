@@ -2,57 +2,50 @@
 Main Qt window
 """
 
-from qtpy.QtWidgets import QHBoxLayout, QPushButton, QTabWidget, QVBoxLayout, QWidget
+from qtpy.QtWidgets import QLabel, QListWidget, QVBoxLayout, QWidget
 
-from pyoncatqt.help.help_model import help_function
-from pyoncatqt.home.home_model import HomeModel
-from pyoncatqt.home.home_presenter import HomePresenter
-from pyoncatqt.home.home_view import Home
+from pyoncatqt.login import ONCatLogin
 
 
 class MainWindow(QWidget):
     """Main widget"""
 
-    def __init__(self, parent=None):
-        super().__init__(parent)
+    def __init__(self, parent):
+        super().__init__(parent=parent)
+        self.initUI()
 
-        ### Create tabs here ###
-
-        ### Main tab
-        self.tabs = QTabWidget()
-        home = Home(self)
-        home_model = HomeModel()
-        self.home_presenter = HomePresenter(home, home_model)
-        self.tabs.addTab(home, "Home")
-
-        ### Set tab layout
+    def initUI(self):
         layout = QVBoxLayout()
-        layout.addWidget(self.tabs)
 
-        ### Create bottom interface here ###
+        # Create and add the Oncat widget
+        self.oncat_widget = ONCatLogin(key="shiver", parent=self)
+        self.oncat_widget.connection_updated.connect(self.update_instrument_lists)
+        layout.addWidget(self.oncat_widget)
 
-        # Help button
-        help_button = QPushButton("Help")
-        help_button.clicked.connect(self.handle_help)
+        # Add text input boxes for wavelength and run number
+        self.sns_list = QListWidget()
+        self.hfir_list = QListWidget()
 
-        # Set bottom interface layout
-        hor_layout = QHBoxLayout()
-        hor_layout.addWidget(help_button)
-
-        layout.addLayout(hor_layout)
+        layout.addWidget(QLabel("SNS Instruments:"))
+        layout.addWidget(self.sns_list)
+        layout.addWidget(QLabel("HFIR Instruments:"))
+        layout.addWidget(self.hfir_list)
 
         self.setLayout(layout)
+        self.setWindowTitle("ONCat Application")
+        self.oncat_widget.update_connection_status()
 
-        # register child widgets to make testing easier
-        self.home = home
+    def update_instrument_lists(self, is_connected):
+        """Update the contents of the instrument lists based on the connection status."""
+        self.sns_list.clear()
+        self.hfir_list.clear()
 
-    def handle_help(self):
-        """
-        get current tab type and open the corresponding help page
-        """
-        open_tab = self.tabs.currentWidget()
-        if isinstance(open_tab, Home):
-            context = "home"
-        else:
-            context = ""
-        help_function(context=context)
+        if is_connected:
+            sns_instruments = self.oncat_widget.agent.Instrument.list(facility="SNS")
+            hfir_instruments = self.oncat_widget.agent.Instrument.list(facility="HFIR")
+
+            for instrument in sns_instruments:
+                self.sns_list.addItem(instrument.get("name"))
+
+            for instrument in hfir_instruments:
+                self.hfir_list.addItem(instrument.get("name"))

@@ -8,8 +8,8 @@ except ImportError:
     __version__ = "unknown"
 
 
-def PackageName():  # pylint: disable=invalid-name
+def PyONCatQt():
     """This is needed for backward compatibility because mantid workbench does "from shiver import Shiver" """
-    from .pyoncatqt import PackageName as packagename  # pylint: disable=import-outside-toplevel
+    from .pyoncatqt import PyONCatQt as pyoncatqt
 
-    return packagename()
+    return pyoncatqt()
