@@ -10,11 +10,11 @@ from pyoncatqt.login import ONCatLogin
 class MainWindow(QWidget):
     """Main widget"""
 
-    def __init__(self, parent):
+    def __init__(self: QWidget, parent: QWidget) -> None:
         super().__init__(parent=parent)
         self.initUI()
 
-    def initUI(self):
+    def initUI(self: QWidget) -> None:
         layout = QVBoxLayout()
 
         # Create and add the Oncat widget
@@ -35,7 +35,7 @@ class MainWindow(QWidget):
         self.setWindowTitle("ONCat Application")
         self.oncat_widget.update_connection_status()
 
-    def update_instrument_lists(self, is_connected):
+    def update_instrument_lists(self: QWidget, is_connected: bool) -> None:
         """Update the contents of the instrument lists based on the connection status."""
         self.sns_list.clear()
         self.hfir_list.clear()

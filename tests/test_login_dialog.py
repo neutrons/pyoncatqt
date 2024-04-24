@@ -15,21 +15,20 @@ from qtpy.QtWidgets import QApplication, QDialog, QErrorMessage, QLineEdit, QPus
 
 
 @pytest.fixture()
-def _config_path(monkeypatch):
+def _config_path(monkeypatch: pytest.fixture) -> None:
     monkeypatch.setattr(pyoncatqt.configuration, "CONFIG_PATH_FILE", "tests/data/configuration.ini")
 
 
 @pytest.fixture()
-def token_path():
+def token_path() -> str:
     return "tests/data/token.json"
 
 
-def check_status(login_status):
-    print("here")
+def check_status(login_status: bool) -> None:
     assert login_status
 
 
-def test_login_dialog_creation():
+def test_login_dialog_creation() -> None:
     application = QApplication([])
     dialog = ONCatLoginDialog(application)
     assert isinstance(dialog, QDialog)
@@ -42,7 +41,7 @@ def test_login_dialog_creation():
     assert isinstance(dialog.button_cancel, QPushButton)
 
 
-def test_login(qtbot, _config_path):  # noqa ARG001
+def test_login(qtbot: pytest.fixture, _config_path: pytest.fixture) -> None:  # noqa ARG001
     dialog = ONCatLogin(key="test")
     dialog.login_dialog = ONCatLoginDialog(agent=MagicMock(), parent=dialog)
     dialog.login_dialog.login_status.connect(check_status)
@@ -51,7 +50,7 @@ def test_login(qtbot, _config_path):  # noqa ARG001
 
     completed = False
 
-    def handle_dialog():
+    def handle_dialog() -> None:
         nonlocal completed
 
         qtbot.keyClicks(dialog.login_dialog.user_pwd, "password")
@@ -59,7 +58,7 @@ def test_login(qtbot, _config_path):  # noqa ARG001
         qtbot.mouseClick(dialog.login_dialog.button_login, QtCore.Qt.LeftButton)
         completed = True
 
-    def dialog_completed():
+    def dialog_completed() -> None:
         nonlocal completed
         assert completed is True
 
@@ -69,7 +68,7 @@ def test_login(qtbot, _config_path):  # noqa ARG001
     qtbot.waitUntil(dialog_completed, timeout=5000)
 
 
-def test_login_dialog_nominal(qtbot):
+def test_login_dialog_nominal(qtbot: pytest.fixture) -> None:
     agent = MagicMock()
     dialog = ONCatLoginDialog(agent=agent)
     dialog.login_status.connect(check_status)
@@ -82,7 +81,7 @@ def test_login_dialog_nominal(qtbot):
     assert agent.login.called_once_with(os.getlogin(), "password")
 
 
-def test_login_dialog_no_password(qtbot):
+def test_login_dialog_no_password(qtbot: pytest.fixture) -> None:
     mock_agent = MagicMock(spec=pyoncat.ONCat)
     mock_agent.login.side_effect = pyoncat.LoginRequiredError
     dialog = ONCatLoginDialog(agent=mock_agent)
@@ -96,7 +95,7 @@ def test_login_dialog_no_password(qtbot):
     assert dialog.show_message.called_once_with("A username and/or password was not provided when logging in.")
 
 
-def test_login_dialog_bad_password(qtbot):
+def test_login_dialog_bad_password(qtbot: pytest.fixture) -> None:
     mock_agent = MagicMock(spec=pyoncat.ONCat)
     mock_agent.login.side_effect = oauthlib.oauth2.rfc6749.errors.InvalidGrantError
     dialog = ONCatLoginDialog(agent=mock_agent)
@@ -111,14 +110,14 @@ def test_login_dialog_bad_password(qtbot):
     assert dialog.show_message.called_once_with("Invalid username or password. Please try again.")
 
 
-def test_login_dialog_no_agent(qtbot):
+def test_login_dialog_no_agent(qtbot: pytest.fixture) -> None:
     with patch("pyoncatqt.login.ONCatLoginDialog.show_message"):
         dialog = ONCatLoginDialog()
         qtbot.addWidget(dialog)
         assert dialog.show_message.called_once_with("No Agent provided for login.")
 
 
-def test_login_read_token(qtbot, _config_path, token_path):  # noqa ARG001
+def test_read_token(qtbot: pytest.fixture, _config_path: pytest.fixture, token_path: pytest.fixture) -> None:  # noqa ARG001
     widget = ONCatLogin(key="test")
     qtbot.addWidget(widget)
     widget.token_path = token_path
@@ -128,7 +127,7 @@ def test_login_read_token(qtbot, _config_path, token_path):  # noqa ARG001
     assert test_token == actual_token
 
 
-def test_write_token(qtbot, _config_path, token_path):  # noqa ARG001
+def test_write_token(qtbot: pytest.fixture, _config_path: pytest.fixture, token_path: pytest.fixture) -> None:  # noqa ARG001
     widget = ONCatLogin(key="test")
     qtbot.addWidget(widget)
     widget.token_path = token_path

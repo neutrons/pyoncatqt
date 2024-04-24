@@ -7,7 +7,7 @@ from configparser import ConfigParser
 CONFIG_PATH_FILE = "src/pyoncatqt/configuration.ini"
 
 
-def get_data(section, name=None):
+def get_data(section: str, name: str = None) -> dict | str | bool | None:
     """retrieves the configuration data for a variable with name"""
     # default file path location
     config_file_path = CONFIG_PATH_FILE

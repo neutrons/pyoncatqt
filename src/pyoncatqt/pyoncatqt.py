@@ -6,8 +6,8 @@ import sys
 
 from qtpy.QtWidgets import QApplication, QMainWindow
 
-from pyoncatqt.mainwindow import MainWindow  # noqa: E402 pylint: disable=wrong-import-position
-from pyoncatqt.version import __version__  # noqa: E402 pylint: disable=wrong-import-position
+from pyoncatqt.mainwindow import MainWindow  # noqa: E402
+from pyoncatqt.version import __version__  # noqa: E402
 
 
 class PyONCatQt(QMainWindow):
@@ -15,12 +15,12 @@ class PyONCatQt(QMainWindow):
 
     __instance = None
 
-    def __new__(cls):
+    def __new__(cls: QMainWindow) -> QMainWindow:
         if PyONCatQt.__instance is None:
-            PyONCatQt.__instance = QMainWindow.__new__(cls)  # pylint: disable=no-value-for-parameter
+            PyONCatQt.__instance = QMainWindow.__new__(cls)
         return PyONCatQt.__instance
 
-    def __init__(self, parent=None):
+    def __init__(self: QMainWindow, parent: QApplication = None) -> None:
         super().__init__(parent)
 
         self.setWindowTitle(f"PYONCATQT - {__version__}")
@@ -28,7 +28,7 @@ class PyONCatQt(QMainWindow):
         self.setCentralWidget(self.main_window)
 
 
-def gui():
+def gui() -> None:
     """
     Main entry point for Qt application
     """

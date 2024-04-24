@@ -39,6 +39,14 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinx.ext.napoleon",
 ]
+
+autodoc_mock_imports = [
+    "qtpy",
+    "qtpy.uic",
+    "qtpy.QtWidgets",
+    "mantidqt",
+]
+
 templates_path = ["_templates"]
 
 # The suffix(es) of source filenames.
@@ -47,7 +55,7 @@ templates_path = ["_templates"]
 source_suffix = [".rst", ".md"]
 
 # The master toctree document.
-master_doc = "index"
+master_doc = "source/index"
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
@@ -69,7 +77,7 @@ autosummary_generate = True
 napoleon_google_docstring = False
 napoleon_numpy_docstring = True
 
-html_static_path = ["_static"]
+# html_static_path = ["_static"]
 
 # If true, `todo` and `todoList` produce output, else they produce nothing.
 todo_include_todos = True

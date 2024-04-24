@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+from typing import Any, Dict
 
 import oauthlib
 import pyoncat
@@ -17,17 +18,50 @@ from qtpy.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QVBoxLayout,
+    QWidget,
 )
 
 from pyoncatqt.configuration import get_data
 
 
 class ONCatLoginDialog(QDialog):
-    """OnCat login dialog"""
+    """
+    OnCat login dialog for handling authentication.
+
+    Params
+    ------
+    agent : pyoncat.ONCat, required
+        An instance of pyoncat.ONCat for handling authentication.
+    parent : QWidget, optional
+        The parent widget.
+    username_label : str, optional
+        The label text for the username field. Defaults to "UserId".
+    password_label : str, optional
+        The label text for the password field. Defaults to "Password".
+    login_title : str, optional
+        The title of the login dialog window.
+        Defaults to "Use U/XCAM to connect to OnCat".
+    password_echo : QLineEdit.EchoMode, optional
+        The echo mode for the password field.
+        Defaults to QLineEdit.Password.
+
+    Attributes
+    ----------
+    login_status : Signal
+        Signal emitted when the login status changes.
+
+    Methods
+    -------
+    show_message(msg: str) -> None:
+        Show an error dialog with the given message.
+
+    accept() -> None:
+        Accept the login attempt.
+    """
 
     login_status = Signal(bool)
 
-    def __init__(self, agent=None, parent=None, **kwargs):
+    def __init__(self: QDialog, agent: pyoncat.ONCat = None, parent: QWidget = None, **kwargs: Dict[str, Any]) -> None:
         super().__init__(parent)
         username_label_text = kwargs.pop("username_label", "UserId")
         password_label_text = kwargs.pop("password_label", "Password")
@@ -77,13 +111,13 @@ class ONCatLoginDialog(QDialog):
 
         self.user_pwd.setFocus()
 
-    def show_message(self, msg):
+    def show_message(self: QDialog, msg: str) -> None:
         """Will show a error dialog with the given message"""
         error = QErrorMessage(self)
         error.showMessage(msg)
         error.exec_()
 
-    def accept(self):
+    def accept(self: QDialog) -> None:
         """Accept"""
         try:
             self.agent.login(
@@ -105,11 +139,55 @@ class ONCatLoginDialog(QDialog):
 
 
 class ONCatLogin(QGroupBox):
-    """ONCat widget"""
+    """
+    ONCatLogin widget for connecting to the ONCat service.
+    This widget provides a label and a button to call the login dialog.
+
+    Params
+    ------
+    key : str, required
+        The key used to retrieve ONCat client ID from configuration. Defaults to None.
+    parent : QWidget, optional
+        The parent widget.
+    kwargs : Dict[str, Any], optional
+        Additional keyword arguments.
+
+    Attributes
+    ----------
+    connection_updated : Signal
+        Signal emitted when the connection status is updated.
+
+    Methods
+    -------
+    update_connection_status() -> None:
+        Update the connection status.
+    is_connected() -> bool:
+        Check if connected to OnCat.
+    get_agent_instance() -> pyoncat.ONCat:
+        Get the OnCat agent instance.
+    connect_to_oncat() -> None:
+        Connect to OnCat.
+    read_token() -> dict:
+        Read token from file.
+    write_token(token: dict) -> None:
+        Write token to file.
+    """
 
     connection_updated = Signal(bool)
 
-    def __init__(self, key=None, parent=None, **kwargs):
+    def __init__(self: QGroupBox, key: str = None, parent: QWidget = None, **kwargs: Dict[str, Any]) -> None:
+        """
+        Initialize the ONCatLogin widget.
+
+        Params
+        ------
+        key : str, optional
+            The key used to retrieve ONCat client ID from configuration. Defaults to None.
+        parent : QWidget, optional
+            The parent widget.
+        **kwargs : Dict[str, Any], optional
+            Additional keyword arguments.
+        """
         super().__init__(parent)
         self.oncat_options_layout = QGridLayout()
         self.setLayout(self.oncat_options_layout)  # Set the layout for the group box
@@ -150,7 +228,7 @@ class ONCatLogin(QGroupBox):
         self.login_dialog = ONCatLoginDialog(agent=self.agent, parent=self, **kwargs)
         self.update_connection_status()
 
-    def update_connection_status(self):
+    def update_connection_status(self: QGroupBox) -> None:
         """Update connection status"""
         if self.is_connected:
             self.status_label.setText("ONCat: Connected")
@@ -162,8 +240,15 @@ class ONCatLogin(QGroupBox):
         self.connection_updated.emit(self.is_connected)
 
     @property
-    def is_connected(self):
-        """Check if connected to OnCat"""
+    def is_connected(self: QGroupBox) -> bool:
+        """
+        Check if connected to OnCat.
+
+        Returns
+        -------
+        bool
+            True if connected, False otherwise.
+        """
         try:
             self.agent.Facility.list()
             return True
@@ -174,11 +259,18 @@ class ONCatLogin(QGroupBox):
         except Exception:  # noqa BLE001
             return False
 
-    def get_agent_instance(self):
-        """Get OnCat agent instance"""
+    def get_agent_instance(self: QGroupBox) -> pyoncat.ONCat:
+        """
+        Get OnCat agent instance.
+
+        Returns
+        -------
+        pyoncat.ONCat
+            The OnCat agent instance.
+        """
         return self.agent
 
-    def connect_to_oncat(self):
+    def connect_to_oncat(self: QGroupBox) -> None:
         """Connect to OnCat"""
         # Check if already connected to OnCat
         if self.is_connected:
@@ -188,8 +280,15 @@ class ONCatLogin(QGroupBox):
         self.update_connection_status()
         # self.parent.update_boxes()
 
-    def read_token(self):
-        """Read token from file"""
+    def read_token(self: QGroupBox) -> dict:
+        """
+        Read token from file.
+
+        Returns
+        -------
+        dict
+            The token dictionary.
+        """
         # If there is not a token stored, return None
         if not os.path.exists(self.token_path):
             return None
@@ -197,8 +296,15 @@ class ONCatLogin(QGroupBox):
         with open(self.token_path, encoding="UTF-8") as storage:
             return json.load(storage)
 
-    def write_token(self, token):
-        """Write token to file"""
+    def write_token(self: QGroupBox, token: dict) -> None:
+        """
+        Write token to file.
+
+        Params
+        ------
+        token : dict
+            The token dictionary.
+        """
         # Check if directory exists
         if not os.path.exists(os.path.dirname(self.token_path)):
             os.makedirs(os.path.dirname(self.token_path))
