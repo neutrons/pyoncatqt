@@ -1,27 +1,15 @@
 import functools
 import json
 import os
-import unittest
 from unittest.mock import MagicMock, patch
 
 import oauthlib
 import pyoncat
-import pyoncatqt.configuration
 import pytest
 from pyoncatqt.configuration import get_data
 from pyoncatqt.login import ONCatLogin, ONCatLoginDialog
 from qtpy import QtCore
-from qtpy.QtWidgets import QApplication, QDialog, QErrorMessage, QLineEdit, QPushButton
-
-
-@pytest.fixture()
-def _config_path(monkeypatch: pytest.fixture) -> None:
-    monkeypatch.setattr(pyoncatqt.configuration, "CONFIG_PATH_FILE", "tests/data/configuration.ini")
-
-
-@pytest.fixture()
-def token_path() -> str:
-    return "tests/data/token.json"
+from qtpy.QtWidgets import QApplication, QDialog, QLineEdit, QPushButton
 
 
 def check_status(login_status: bool) -> None:
@@ -41,7 +29,7 @@ def test_login_dialog_creation() -> None:
     assert isinstance(dialog.button_cancel, QPushButton)
 
 
-def test_login(qtbot: pytest.fixture, _config_path: pytest.fixture) -> None:  # noqa ARG001
+def test_login(qtbot: pytest.fixture) -> None:
     dialog = ONCatLogin(key="test")
     dialog.login_dialog = ONCatLoginDialog(agent=MagicMock(), parent=dialog)
     dialog.login_dialog.login_status.connect(check_status)
@@ -117,7 +105,7 @@ def test_login_dialog_no_agent(qtbot: pytest.fixture) -> None:
         assert dialog.show_message.called_once_with("No Agent provided for login.")
 
 
-def test_read_token(qtbot: pytest.fixture, _config_path: pytest.fixture, token_path: pytest.fixture) -> None:  # noqa ARG001
+def test_read_token(qtbot: pytest.fixture, token_path: pytest.fixture) -> None:
     widget = ONCatLogin(key="test")
     qtbot.addWidget(widget)
     widget.token_path = token_path
@@ -127,7 +115,7 @@ def test_read_token(qtbot: pytest.fixture, _config_path: pytest.fixture, token_p
     assert test_token == actual_token
 
 
-def test_write_token(qtbot: pytest.fixture, _config_path: pytest.fixture, token_path: pytest.fixture) -> None:  # noqa ARG001
+def test_write_token(qtbot: pytest.fixture, token_path: pytest.fixture) -> None:
     widget = ONCatLogin(key="test")
     qtbot.addWidget(widget)
     widget.token_path = token_path
