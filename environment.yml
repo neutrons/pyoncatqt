@@ -15,5 +15,6 @@ dependencies:
   - python-build
   - pytest
   - pytest-cov
+  - pytest-qt
   - setuptools
   - versioningit
