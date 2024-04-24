@@ -28,5 +28,5 @@ Contents
 .. toctree::
    :maxdepth: 1
 
-   reference
-   sample
+   source/reference
+   source/sample
