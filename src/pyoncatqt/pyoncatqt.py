@@ -3,6 +3,7 @@ Main Qt application
 """
 
 import sys
+from typing import Any, Dict
 
 from qtpy.QtWidgets import QApplication, QMainWindow
 
@@ -15,16 +16,16 @@ class PyONCatQt(QMainWindow):
 
     __instance = None
 
-    def __new__(cls: QMainWindow) -> QMainWindow:
+    def __new__(cls: QMainWindow, **kwargs: Dict[str, Any]) -> QMainWindow:  # noqa ARG003
         if PyONCatQt.__instance is None:
             PyONCatQt.__instance = QMainWindow.__new__(cls)
         return PyONCatQt.__instance
 
-    def __init__(self: QMainWindow, parent: QApplication = None) -> None:
+    def __init__(self: QMainWindow, parent: QApplication = None, **kwargs: Dict[str, Any]) -> None:
         super().__init__(parent)
-
+        key = kwargs.pop("key", "shiver")
         self.setWindowTitle(f"PYONCATQT - {__version__}")
-        self.main_window = MainWindow(self)
+        self.main_window = MainWindow(key, parent=self)
         self.setCentralWidget(self.main_window)
 
 

@@ -6,7 +6,7 @@ from qtpy.QtWidgets import QLabel, QListWidget
 
 
 def test_update_instrument_lists(qtbot: pytest.fixture) -> None:
-    main_window = MainWindow(None)
+    main_window = MainWindow("test", None)
     qtbot.addWidget(main_window)
 
     oncat_widget_mock = MagicMock()

@@ -10,15 +10,13 @@ from pyoncatqt.login import ONCatLogin
 class MainWindow(QWidget):
     """Main widget"""
 
-    def __init__(self: QWidget, parent: QWidget) -> None:
+    def __init__(self: QWidget, key: str = "shiver", parent: QWidget = None) -> None:
         super().__init__(parent=parent)
-        self.initUI()
 
-    def initUI(self: QWidget) -> None:
         layout = QVBoxLayout()
 
         # Create and add the Oncat widget
-        self.oncat_widget = ONCatLogin(key="shiver", parent=self)
+        self.oncat_widget = ONCatLogin(key=key, parent=self)
         self.oncat_widget.connection_updated.connect(self.update_instrument_lists)
         layout.addWidget(self.oncat_widget)
 

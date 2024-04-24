@@ -36,7 +36,8 @@ def test_gui(mock_pyoncatqt: mock, mock_qtapp: mock) -> None:
 
 
 def test_PyONCatQt_initialization(qtbot: pytest.fixture) -> None:
-    pyoncatqt = PyONCatQt()
+    kwargs = {"key": "test"}
+    pyoncatqt = PyONCatQt(**kwargs)
     qtbot.addWidget(pyoncatqt)
 
     assert pyoncatqt.windowTitle() == f"PYONCATQT - {__version__}"
