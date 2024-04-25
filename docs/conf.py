@@ -38,6 +38,7 @@ extensions = [
     "sphinx.ext.githubpages",
     "sphinx.ext.intersphinx",
     "sphinx.ext.napoleon",
+    "sphinxcontrib.mermaid",
 ]
 
 autodoc_mock_imports = [
@@ -77,7 +78,9 @@ autosummary_generate = True
 napoleon_google_docstring = False
 napoleon_numpy_docstring = True
 
-# html_static_path = ["_static"]
+# html_static_path = ["source/_static"]
+
+html_theme_options = {"page_width": "75%"}
 
 # If true, `todo` and `todoList` produce output, else they produce nothing.
 todo_include_todos = True

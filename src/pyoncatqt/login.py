@@ -79,6 +79,7 @@ class ONCatLoginDialog(QDialog):
 
         self.button_login = QPushButton("&Login")
         self.button_cancel = QPushButton("Cancel")
+        self.button_login.setEnabled(False)
 
         self.setMinimumSize(QSize(400, 100))
         layout = QVBoxLayout()
@@ -107,15 +108,21 @@ class ONCatLoginDialog(QDialog):
         # connect signals and slots
         self.button_login.clicked.connect(self.accept)
         self.button_cancel.clicked.connect(self.reject)
-        self.user_pwd.returnPressed.connect(self.accept)
+        self.user_name.textChanged.connect(self.update_button_status)
+        self.user_pwd.textChanged.connect(self.update_button_status)
 
         self.user_pwd.setFocus()
 
+        self.error = QErrorMessage(self)
+
     def show_message(self: QDialog, msg: str) -> None:
         """Will show a error dialog with the given message"""
-        error = QErrorMessage(self)
-        error.showMessage(msg)
-        error.exec_()
+        self.error.showMessage(msg)
+        # self.error.exec_()
+
+    def update_button_status(self: QDialog) -> None:
+        """Update the button status"""
+        self.button_login.setEnabled(bool(self.user_name.text() and self.user_pwd.text()))
 
     def accept(self: QDialog) -> None:
         """Accept"""
@@ -211,8 +218,7 @@ class ONCatLogin(QGroupBox):
         self.oncat_url = get_data("login.oncat", "oncat_url")
         self.client_id = get_data("login.oncat", f"{key}_id")
         if not self.client_id:
-            raise ValueError(f"Invalid key: {key}, ONCat client ID not found")
-            return
+            raise ValueError(f"Invalid module {key}. No OnCat client Id is found for this application.")
 
         self.token_path = os.path.abspath(f"{os.path.expanduser('~')}/.pyoncatqt/{key}_token.json")
 
@@ -294,7 +300,10 @@ class ONCatLogin(QGroupBox):
             return None
 
         with open(self.token_path, encoding="UTF-8") as storage:
-            return json.load(storage)
+            try:
+                return json.load(storage)
+            except json.JSONDecodeError:
+                return None
 
     def write_token(self: QGroupBox, token: dict) -> None:
         """

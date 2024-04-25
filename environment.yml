@@ -17,4 +17,6 @@ dependencies:
   - pytest-cov
   - pytest-qt
   - setuptools
+  - sphinx
+  - sphinxcontrib-mermaid
   - versioningit
