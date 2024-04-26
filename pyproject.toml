@@ -30,29 +30,37 @@ file = "src/pyoncatqt/_version.py"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-exclude = ["tests*", "docs*"]
+exclude = ["tests*", "docs*", "scripts*"]
+
+[project.gui-scripts]
+pyoncatqt = "pyoncatqt.version:get_version"
 
 [tool.setuptools.package-data]
 "*" = ["*.yml","*.yaml","*.ini"]
 
-# TODO: Define once the package is ready for distribution
-#[project.scripts]
-#packagename-cli = "packagenamepy.packagename:main"
-
-#[project.gui-scripts]
-#packagenamepy = "packagenamepy.packagename:gui"
-
 [tool.pytest.ini_options]
-pythonpath = [".", "src", "scripts"]
+pythonpath = [".", "src"]
 testpaths = ["tests"]
 python_files = ["test*.py"]
 norecursedirs = [".git", "tmp*", "_tmp*", "__pycache__", "*dataset*", "*data_set*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "except ImportError:",
+    "except ModuleNotFoundError:",
+    "except pyoncat.LoginRequiredError:",
+    "except pyoncat.InvalidRefreshTokenError:",
+    "except Exception:",
+    "except json.JSONDecodeError:",
+    "except KeyError:",
+]
+omit = ["src/pyoncatqt/_version.py"]
 
 [tool.ruff]
 line-length = 120
 
 [tool.ruff.lint]
 # https://beta.ruff.rs/docs/rules/
-select = ["A", "ARG", "BLE", "E", "F", "I", "PT"]
+select = ["A", "ARG", "BLE", "E", "F", "I", "PT", "ANN"]
 ignore = ["F403", "F405", "F401", # wild imports and  unknown names
 ]

@@ -35,6 +35,9 @@ requirements:
 
   run:
     - python
+    - pyoncat
+    - oauthlib
+    - mantidqt
 
 about:
   home: {{ url }}
