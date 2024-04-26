@@ -1,3 +1,5 @@
+.. _sample:
+
 Sample Usage
 ============
 

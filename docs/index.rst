@@ -15,12 +15,13 @@ experience when interacting with ONCat within Python applications.
 
 Getting Started
 ---------------
-Install instructions coming soon.
+To install PyONCatQt, run the following command:
 
+.. code-block:: bash
 
-.. note::
+   conda install -c neutrons pyoncatqt
 
-   This project is under active development.
+To use PyONCatQt please see the :ref:`sample` section for examples.
 
 Contents
 --------

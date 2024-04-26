@@ -1,11 +1,11 @@
 Reference
 =========
 
-PyONCatQt
----------
+ONCatLogin
+----------
 
-.. module:: PyONCatQt
-.. automodule:: pyoncatqt.pyoncatqt
+.. module:: ONCatLogin
+.. automodule:: pyoncatqt.login.ONCatLogin
     :members:
 
 ONCatLoginDialog
@@ -13,11 +13,4 @@ ONCatLoginDialog
 
 .. module:: ONCatLoginDialog
 .. automodule:: pyoncatqt.login.ONCatLoginDialog
-    :members:
-
-ONCatLogin
-----------
-
-.. module:: ONCatLogin
-.. automodule:: pyoncatqt.login.ONCatLogin
     :members:
