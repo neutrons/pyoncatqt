@@ -1,10 +1,7 @@
-"""
-Main Qt window
-"""
-
-from qtpy.QtWidgets import QLabel, QListWidget, QVBoxLayout, QWidget
+import sys
 
 from pyoncatqt.login import ONCatLogin
+from qtpy.QtWidgets import QApplication, QLabel, QListWidget, QVBoxLayout, QWidget
 
 
 class MainWindow(QWidget):
@@ -47,3 +44,10 @@ class MainWindow(QWidget):
 
             for instrument in hfir_instruments:
                 self.hfir_list.addItem(instrument.get("name"))
+
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec_())

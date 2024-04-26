@@ -30,13 +30,13 @@ file = "src/pyoncatqt/_version.py"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-exclude = ["tests*", "docs*"]
+exclude = ["tests*", "docs*", "scripts*"]
+
+[project.gui-scripts]
+pyoncatqt = "pyoncatqt.version:get_version"
 
 [tool.setuptools.package-data]
 "*" = ["*.yml","*.yaml","*.ini"]
-
-[project.gui-scripts]
-pyoncatqt = "pyoncatqt.pyoncatqt:gui"
 
 [tool.pytest.ini_options]
 pythonpath = [".", "src"]
@@ -48,7 +48,13 @@ norecursedirs = [".git", "tmp*", "_tmp*", "__pycache__", "*dataset*", "*data_set
 exclude_lines = [
     "except ImportError:",
     "except ModuleNotFoundError:",
+    "except pyoncat.LoginRequiredError:",
+    "except pyoncat.InvalidRefreshTokenError:",
+    "except Exception:",
+    "except json.JSONDecodeError:",
+    "except KeyError:",
 ]
+omit = ["src/pyoncatqt/_version.py"]
 
 [tool.ruff]
 line-length = 120

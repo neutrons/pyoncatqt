@@ -118,7 +118,6 @@ class ONCatLoginDialog(QDialog):
     def show_message(self: QDialog, msg: str) -> None:
         """Will show a error dialog with the given message"""
         self.error.showMessage(msg)
-        # self.error.exec_()
 
     def update_button_status(self: QDialog) -> None:
         """Update the button status"""

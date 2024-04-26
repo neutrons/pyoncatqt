@@ -56,6 +56,24 @@ def test_login(qtbot: pytest.fixture) -> None:
     qtbot.waitUntil(dialog_completed, timeout=5000)
 
 
+def test_get_agent() -> None:
+    dialog = ONCatLogin(key="test")
+    dialog.agent = MagicMock()
+    assert dialog.get_agent_instance() == dialog.agent
+
+
+def test_is_connected() -> None:
+    dialog = ONCatLogin(key="test")
+    mock_agent = MagicMock()
+    dialog.agent = mock_agent
+    mock_agent.Instrument.list.return_value = [{"name": "Instrument1"}, {"name": "Instrument2"}]
+    dialog.login_dialog = MagicMock()
+
+    assert dialog.is_connected
+    dialog.connect_to_oncat()
+    assert not dialog.login_dialog.exec_.called
+
+
 def test_login_dialog_nominal(qtbot: pytest.fixture) -> None:
     agent = MagicMock()
     dialog = ONCatLoginDialog(agent=agent)
@@ -78,6 +96,7 @@ def test_login_dialog_no_password(qtbot: pytest.fixture) -> None:
     dialog.show()
     qtbot.wait(2000)
     assert dialog.user_pwd.text() == ""
+    assert dialog.button_login.isEnabled() is False
     qtbot.mouseClick(dialog.button_login, QtCore.Qt.LeftButton)
     assert mock_agent.login.called_once_with(os.getlogin(), "")
     assert dialog.show_message.called_once_with("A username and/or password was not provided when logging in.")

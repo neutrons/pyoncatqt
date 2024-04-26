@@ -4,7 +4,8 @@ import os
 from configparser import ConfigParser
 
 # configuration settings file path
-CONFIG_PATH_FILE = "src/pyoncatqt/configuration.ini"
+config_dir = os.path.dirname(os.path.abspath(__file__))
+CONFIG_PATH_FILE = os.path.join(config_dir, "configuration.ini")
 
 
 def get_data(section: str, name: str = None) -> dict | str | bool | None:
