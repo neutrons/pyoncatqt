@@ -6,10 +6,11 @@ from unittest.mock import MagicMock, patch
 import oauthlib
 import pyoncat
 import pytest
-from pyoncatqt.configuration import get_data
-from pyoncatqt.login import ONCatLogin, ONCatLoginDialog
 from qtpy import QtCore
 from qtpy.QtWidgets import QApplication, QDialog, QLineEdit, QPushButton
+
+from pyoncatqt.configuration import get_data
+from pyoncatqt.login import ONCatLogin, ONCatLoginDialog
 
 
 def check_status(login_status: bool) -> None:
