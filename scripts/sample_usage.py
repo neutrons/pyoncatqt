@@ -1,7 +1,8 @@
 import sys
 
-from pyoncatqt.login import ONCatLogin
 from qtpy.QtWidgets import QApplication, QLabel, QListWidget, QVBoxLayout, QWidget
+
+from pyoncatqt.login import ONCatLogin
 
 
 class MainWindow(QWidget):

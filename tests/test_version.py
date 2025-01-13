@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 import pytest
+
 from pyoncatqt.version import get_version
 
 
