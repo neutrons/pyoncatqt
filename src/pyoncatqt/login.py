@@ -151,7 +151,9 @@ class ONCatLogin(QGroupBox):
 
     Params
     ------
-    key : str, required
+    client_id : str, optional
+        The client_id is an ONCat client ID. Defaults to None. client_id is required or key is required
+    key : str, optional
         The key used to retrieve ONCat client ID from configuration. Defaults to None.
     parent : QWidget, optional
         The parent widget.
@@ -181,12 +183,16 @@ class ONCatLogin(QGroupBox):
 
     connection_updated = Signal(bool)
 
-    def __init__(self: QGroupBox, key: str = None, parent: QWidget = None, **kwargs: Dict[str, Any]) -> None:
+    def __init__(
+        self: QGroupBox, client_id: str = None, key: str = None, parent: QWidget = None, **kwargs: Dict[str, Any]
+    ) -> None:
         """
         Initialize the ONCatLogin widget.
 
         Params
         ------
+        client_id : str, optional
+            The client_id is an ONCat client ID. Defaults to None.
         key : str, optional
             The key used to retrieve ONCat client ID from configuration. Defaults to None.
         parent : QWidget, optional
@@ -215,12 +221,17 @@ class ONCatLogin(QGroupBox):
         # OnCat agent
 
         self.oncat_url = get_data("login.oncat", "oncat_url")
-        self.client_id = get_data("login.oncat", f"{key}_id")
+        self.client_id = client_id or get_data("login.oncat", f"{key}_id")
         if not self.client_id:
-            raise ValueError(f"Invalid module {key}. No OnCat client Id is found for this application.")
+            raise ValueError(f"Invalid module {key}. No OnCat client Id is found or provided for this application.")
 
-        self.token_path = os.path.abspath(f"{os.path.expanduser('~')}/.pyoncatqt/{key}_token.json")
-
+        # use the partial client id to generate the filename
+        token_filename = f"{self.client_id[0:8]}_token.json"
+        if key:
+            token_filename = f"{key}_token.json"
+        self.token_path = os.path.abspath(f"{os.path.expanduser('~')}/.pyoncatqt/{token_filename}")
+        print(" self.client_id", self.client_id)
+        print(" self.token_path", self.token_path)
         self.agent = pyoncat.ONCat(
             self.oncat_url,
             client_id=self.client_id,
