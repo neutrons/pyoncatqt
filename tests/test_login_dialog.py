@@ -36,6 +36,9 @@ def test_login_key(qtbot: pytest.fixture) -> None:
     qtbot.addWidget(dialog)
     dialog.show()
 
+    assert dialog.client_id == "0123456489"
+    assert dialog.token_path.endswith("test_token.json")
+
     completed = False
 
     def handle_dialog() -> None:
@@ -89,7 +92,7 @@ def test_login_client_id(qtbot: pytest.fixture) -> None:
 
 def test_login_client_id_key(qtbot: pytest.fixture) -> None:
     client_id = "12cnfjejsfsdf3456789ab"
-    key = "shiver"
+    key = "test"
 
     dialog = ONCatLogin(client_id=client_id, key=key)
     dialog.login_dialog = ONCatLoginDialog(agent=MagicMock(), parent=dialog)
@@ -97,8 +100,9 @@ def test_login_client_id_key(qtbot: pytest.fixture) -> None:
     qtbot.addWidget(dialog)
     dialog.show()
 
+    # client id provided as parameter
     assert dialog.client_id == client_id
-    # token_shiver.json
+    # key used for filename only token_shiver.json
     assert dialog.token_path.endswith(f"{key}_token.json")
     completed = False
 
