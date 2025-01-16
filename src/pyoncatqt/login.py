@@ -184,7 +184,7 @@ class ONCatLogin(QGroupBox):
     connection_updated = Signal(bool)
 
     def __init__(
-        self: QGroupBox, client_id: str = None, key: str = None, parent: QWidget = None, **kwargs: Dict[str, Any]
+        self: QGroupBox, *, client_id: str = None, key: str = None, parent: QWidget = None, **kwargs: Dict[str, Any]
     ) -> None:
         """
         Initialize the ONCatLogin widget.
@@ -252,7 +252,7 @@ class ONCatLogin(QGroupBox):
             self.status_label.setText("ONCat: Disconnected")
             self.status_label.setStyleSheet("color: red")
 
-        self.connection_updated.emit(self.is_connected)
+        # self.connection_updated.emit(self.is_connected)
 
     @property
     def is_connected(self: QGroupBox) -> bool:
@@ -264,6 +264,7 @@ class ONCatLogin(QGroupBox):
         bool
             True if connected, False otherwise.
         """
+
         try:
             self.agent.Facility.list()
             return True
