@@ -230,6 +230,7 @@ class ONCatLogin(QGroupBox):
         if key:
             token_filename = f"{key}_token.json"
         self.token_path = os.path.abspath(f"{os.path.expanduser('~')}/.pyoncatqt/{token_filename}")
+
         self.agent = pyoncat.ONCat(
             self.oncat_url,
             client_id=self.client_id,
