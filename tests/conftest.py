@@ -1,7 +1,8 @@
 import os
 
-import pyoncatqt.configuration
 import pytest
+
+import pyoncatqt.configuration
 
 
 @pytest.fixture(autouse=True)
@@ -16,6 +17,6 @@ def _get_login(monkeypatch: pytest.fixture) -> None:
     monkeypatch.setattr(os, "getlogin", lambda: "test")
 
 
-@pytest.fixture()
+@pytest.fixture
 def token_path() -> str:
     return "tests/data/token.json"
