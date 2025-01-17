@@ -221,8 +221,11 @@ class ONCatLogin(QGroupBox):
         # OnCat agent
 
         self.oncat_url = get_data("login.oncat", "oncat_url")
-        self.client_id = client_id or get_data("login.oncat", f"{key}_id")
-        if not self.client_id:
+        if client_id is not None:
+            self.client_id = client_id
+        elif key is not None:
+            self.client_id = get_data("login.oncat", f"{key}_id")
+        else:
             raise ValueError(f"Invalid module {key}. No OnCat client Id is found or provided for this application.")
 
         # use the partial client id to generate the filename
@@ -251,8 +254,6 @@ class ONCatLogin(QGroupBox):
         else:
             self.status_label.setText("ONCat: Disconnected")
             self.status_label.setStyleSheet("color: red")
-
-        # self.connection_updated.emit(self.is_connected)
 
     @property
     def is_connected(self: QGroupBox) -> bool:
