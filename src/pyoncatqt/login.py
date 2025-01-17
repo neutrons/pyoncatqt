@@ -254,6 +254,7 @@ class ONCatLogin(QGroupBox):
         else:
             self.status_label.setText("ONCat: Disconnected")
             self.status_label.setStyleSheet("color: red")
+        self.connection_updated.emit(self.is_connected)
 
     @property
     def is_connected(self: QGroupBox) -> bool:
