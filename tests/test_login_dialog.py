@@ -30,13 +30,81 @@ def test_login_dialog_creation() -> None:
     assert isinstance(dialog.button_cancel, QPushButton)
 
 
-def test_login(qtbot: pytest.fixture) -> None:
+def test_login_key(qtbot: pytest.fixture) -> None:
     dialog = ONCatLogin(key="test")
     dialog.login_dialog = ONCatLoginDialog(agent=MagicMock(), parent=dialog)
     dialog.login_dialog.login_status.connect(check_status)
     qtbot.addWidget(dialog)
     dialog.show()
 
+    assert dialog.client_id == "0123456489"
+    assert dialog.token_path.endswith("test_token.json")
+
+    completed = False
+
+    def handle_dialog() -> None:
+        nonlocal completed
+
+        qtbot.keyClicks(dialog.login_dialog.user_pwd, "password")
+        qtbot.wait(2000)
+        qtbot.mouseClick(dialog.login_dialog.button_login, QtCore.Qt.LeftButton)
+        completed = True
+
+    def dialog_completed() -> None:
+        nonlocal completed
+        assert completed is True
+
+    QtCore.QTimer.singleShot(500, functools.partial(handle_dialog))
+    qtbot.mouseClick(dialog.oncat_button, QtCore.Qt.LeftButton)
+
+    qtbot.waitUntil(dialog_completed, timeout=5000)
+
+
+def test_login_client_id(qtbot: pytest.fixture) -> None:
+    client_id = "12cnfjejsfsdf3456789ab"
+    dialog = ONCatLogin(client_id=client_id)
+    dialog.login_dialog = ONCatLoginDialog(agent=MagicMock(), parent=dialog)
+    dialog.login_dialog.login_status.connect(check_status)
+    qtbot.addWidget(dialog)
+    dialog.show()
+
+    assert dialog.client_id == client_id
+    # token_12cnf.json
+    assert dialog.token_path.endswith(f"{client_id[0:8]}_token.json")
+    completed = False
+
+    def handle_dialog() -> None:
+        nonlocal completed
+
+        qtbot.keyClicks(dialog.login_dialog.user_pwd, "password")
+        qtbot.wait(2000)
+        qtbot.mouseClick(dialog.login_dialog.button_login, QtCore.Qt.LeftButton)
+        completed = True
+
+    def dialog_completed() -> None:
+        nonlocal completed
+        assert completed is True
+
+    QtCore.QTimer.singleShot(500, functools.partial(handle_dialog))
+    qtbot.mouseClick(dialog.oncat_button, QtCore.Qt.LeftButton)
+
+    qtbot.waitUntil(dialog_completed, timeout=5000)
+
+
+def test_login_client_id_key(qtbot: pytest.fixture) -> None:
+    client_id = "12cnfjejsfsdf3456789ab"
+    key = "test"
+
+    dialog = ONCatLogin(client_id=client_id, key=key)
+    dialog.login_dialog = ONCatLoginDialog(agent=MagicMock(), parent=dialog)
+    dialog.login_dialog.login_status.connect(check_status)
+    qtbot.addWidget(dialog)
+    dialog.show()
+
+    # client id provided as parameter
+    assert dialog.client_id == client_id
+    # key used for filename only token_shiver.json
+    assert dialog.token_path.endswith(f"{key}_token.json")
     completed = False
 
     def handle_dialog() -> None:

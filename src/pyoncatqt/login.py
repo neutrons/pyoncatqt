@@ -151,7 +151,9 @@ class ONCatLogin(QGroupBox):
 
     Params
     ------
-    key : str, required
+    client_id : str, optional
+        The client_id is an ONCat client ID. Defaults to None. client_id is required or key is required
+    key : str, optional
         The key used to retrieve ONCat client ID from configuration. Defaults to None.
     parent : QWidget, optional
         The parent widget.
@@ -181,12 +183,16 @@ class ONCatLogin(QGroupBox):
 
     connection_updated = Signal(bool)
 
-    def __init__(self: QGroupBox, key: str = None, parent: QWidget = None, **kwargs: Dict[str, Any]) -> None:
+    def __init__(
+        self: QGroupBox, *, client_id: str = None, key: str = None, parent: QWidget = None, **kwargs: Dict[str, Any]
+    ) -> None:
         """
         Initialize the ONCatLogin widget.
 
         Params
         ------
+        client_id : str, optional
+            The client_id is an ONCat client ID. Defaults to None.
         key : str, optional
             The key used to retrieve ONCat client ID from configuration. Defaults to None.
         parent : QWidget, optional
@@ -215,11 +221,18 @@ class ONCatLogin(QGroupBox):
         # OnCat agent
 
         self.oncat_url = get_data("login.oncat", "oncat_url")
-        self.client_id = get_data("login.oncat", f"{key}_id")
-        if not self.client_id:
-            raise ValueError(f"Invalid module {key}. No OnCat client Id is found for this application.")
+        if client_id is not None:
+            self.client_id = client_id
+        elif key is not None:
+            self.client_id = get_data("login.oncat", f"{key}_id")
+        else:
+            raise ValueError(f"Invalid module {key}. No OnCat client Id is found or provided for this application.")
 
-        self.token_path = os.path.abspath(f"{os.path.expanduser('~')}/.pyoncatqt/{key}_token.json")
+        # use the partial client id to generate the filename
+        token_filename = f"{self.client_id[0:8]}_token.json"
+        if key:
+            token_filename = f"{key}_token.json"
+        self.token_path = os.path.abspath(f"{os.path.expanduser('~')}/.pyoncatqt/{token_filename}")
 
         self.agent = pyoncat.ONCat(
             self.oncat_url,
@@ -241,7 +254,6 @@ class ONCatLogin(QGroupBox):
         else:
             self.status_label.setText("ONCat: Disconnected")
             self.status_label.setStyleSheet("color: red")
-
         self.connection_updated.emit(self.is_connected)
 
     @property
@@ -254,6 +266,7 @@ class ONCatLogin(QGroupBox):
         bool
             True if connected, False otherwise.
         """
+
         try:
             self.agent.Facility.list()
             return True

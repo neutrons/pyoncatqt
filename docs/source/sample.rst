@@ -72,7 +72,13 @@ ONCatLoginDialog
 The `ONCatLoginDialog` can be imported and used separate from the `ONCatLogin` widget to give developers
 the ability to customize the login process. In order to use the `ONCatLoginDialog`, you must have an
 instance of the `pyoncat.ONCat` agent.
+
 If you chose to use the `ONCatLogin` widget instead, the agent is already created for you.
+In this case, a `key` or `client_id` are required to be passed by the user application. If `key` (application name)
+is passed, the client_id is retrieved from the configuration, provided it exists. If the client_id is
+provided, it uses this instead. If both are provided, client_id is used for oncat client id tasks, e.g. agent creation,
+and the key is only used to create a human-readbale filename for saving the user's authentication token.
+
 The `ONCatLoginDialog` requires the agent to be passed in as an argument.
 The agent is used to authenticate the user and manage the connection to the ONCat server.
 At a minimum the agent must be initialized with the ONCat server URL, flow, and the client ID.
