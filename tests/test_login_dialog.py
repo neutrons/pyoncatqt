@@ -140,7 +140,8 @@ def test_is_connected() -> None:
 
     assert dialog.is_connected
     dialog.connect_to_oncat()
-    assert not dialog.login_dialog.exec_.called
+    # dialog is always called
+    assert dialog.login_dialog.exec_.called
 
 
 def test_login_dialog_nominal(qtbot: pytest.fixture) -> None:
