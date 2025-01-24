@@ -290,9 +290,6 @@ class ONCatLogin(QGroupBox):
 
     def connect_to_oncat(self: QGroupBox) -> None:
         """Connect to OnCat"""
-        # Check if already connected to OnCat
-        if self.is_connected:
-            return
 
         self.login_dialog.exec_()
         self.update_connection_status()
