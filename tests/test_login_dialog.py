@@ -168,8 +168,8 @@ def test_login_dialog_no_password(qtbot: pytest.fixture) -> None:
     assert dialog.user_pwd.text() == ""
     assert dialog.button_login.isEnabled() is False
     qtbot.mouseClick(dialog.button_login, QtCore.Qt.LeftButton)
-    assert mock_agent.login.called_once_with(os.getlogin(), "")
-    assert dialog.show_message.called_once_with("A username and/or password was not provided when logging in.")
+    mock_agent.call_count == 0
+    assert dialog.show_message.call_count == 0
 
 
 def test_login_dialog_bad_password(qtbot: pytest.fixture) -> None:
@@ -183,8 +183,29 @@ def test_login_dialog_bad_password(qtbot: pytest.fixture) -> None:
     qtbot.wait(2000)
     assert dialog.user_pwd.text() == "bad_password"
     qtbot.mouseClick(dialog.button_login, QtCore.Qt.LeftButton)
-    assert mock_agent.login.called_once_with(os.getlogin(), "bad_password")
-    assert dialog.show_message.called_once_with("Invalid username or password. Please try again.")
+    mock_agent.login.assert_called_once_with(os.getlogin(), "bad_password")
+    dialog.show_message.assert_called_once_with("Invalid username or password. Please try again.")
+
+
+def test_login_dialog_other_exceptions(qtbot: pytest.fixture) -> None:
+    import urllib3
+
+    mock_agent = MagicMock(spec=pyoncat.ONCat)
+    mock_agent.login.side_effect = urllib3.exceptions.NameResolutionError
+    dialog = ONCatLoginDialog(agent=mock_agent)
+    dialog.show_message = MagicMock()
+    qtbot.addWidget(dialog)
+    dialog.show()
+    qtbot.keyClicks(dialog.user_pwd, "bad_password")
+    qtbot.wait(2000)
+    assert dialog.user_pwd.text() == "bad_password"
+    qtbot.mouseClick(dialog.button_login, QtCore.Qt.LeftButton)
+    mock_agent.login.assert_called_once_with(os.getlogin(), "bad_password")
+    # This is the error message that crashed Shiver when there is no internet connection
+    dialog.show_message.assert_called_once_with(
+        "The following exception occured: NameResolutionError.__init__() missing 3 \
+        required positional arguments: 'host', 'conn', and 'reason'"
+    )
 
 
 def test_login_dialog_no_agent(qtbot: pytest.fixture) -> None:
