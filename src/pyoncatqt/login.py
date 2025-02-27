@@ -138,6 +138,10 @@ class ONCatLoginDialog(QDialog):
             self.show_message("A username and/or password was not provided when logging in.")
             self.user_pwd.setText("")
             return
+        except Exception as e:  # noqa: BLE001
+            self.show_message(f"The following exception occured: {e}")
+            self.user_pwd.setText("")
+            return
 
         self.login_status.emit(True)
         # close dialog
