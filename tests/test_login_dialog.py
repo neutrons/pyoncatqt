@@ -203,8 +203,8 @@ def test_login_dialog_other_exceptions(qtbot: pytest.fixture) -> None:
     mock_agent.login.assert_called_once_with(os.getlogin(), "bad_password")
     # This is the error message that crashed Shiver when there is no internet connection
     dialog.show_message.assert_called_once_with(
-        "The following exception occured: NameResolutionError.__init__() missing 3 \
-        required positional arguments: 'host', 'conn', and 'reason'"
+        "The following exception occured: NameResolutionError.__init__() missing \
+3 required positional arguments: 'host', 'conn', and 'reason'"
     )
 
 
