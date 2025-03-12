@@ -188,7 +188,13 @@ class ONCatLogin(QGroupBox):
     connection_updated = Signal(bool)
 
     def __init__(
-        self: QGroupBox, *, client_id: str = None, key: str = None, parent: QWidget = None, **kwargs: Dict[str, Any]
+        self: QGroupBox,
+        *,
+        client_id: str = None,
+        key: str = None,
+        parent: QWidget = None,
+        timeout: float = 10.0,
+        **kwargs: Dict[str, Any],
     ) -> None:
         """
         Initialize the ONCatLogin widget.
@@ -221,7 +227,7 @@ class ONCatLogin(QGroupBox):
         self.oncat_options_layout.addWidget(self.oncat_button, 4, 1)
 
         self.error_message_callback = None
-
+        self.timeout = timeout
         # OnCat agent
 
         self.oncat_url = get_data("login.oncat", "oncat_url")
@@ -245,6 +251,7 @@ class ONCatLogin(QGroupBox):
             token_getter=self.read_token,
             token_setter=self.write_token,
             flow=pyoncat.RESOURCE_OWNER_CREDENTIALS_FLOW,
+            timeout=self.timeout,
         )
 
         self.login_dialog = ONCatLoginDialog(agent=self.agent, parent=self, **kwargs)
