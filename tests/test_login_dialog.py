@@ -157,6 +157,41 @@ def test_login_dialog_nominal(qtbot: pytest.fixture) -> None:
     assert agent.login.called_once_with(os.getlogin(), "password")
 
 
+def test_login_dialog_timeout(qtbot: pytest.fixture) -> None:
+    import socket
+
+    mock_agent = MagicMock(spec=pyoncat.ONCat)
+    mock_agent.login.side_effect = socket.timeout
+    dialog = ONCatLoginDialog(agent=mock_agent)
+    mock_agent.timeout = 0.0000001
+    dialog.show_message = MagicMock()
+    qtbot.addWidget(dialog)
+    dialog.show()
+    qtbot.keyClicks(dialog.user_pwd, "password")
+    qtbot.wait(2000)
+    assert dialog.user_pwd.text() == "password"
+    qtbot.mouseClick(dialog.button_login, QtCore.Qt.LeftButton)
+    mock_agent.login.assert_called_once_with(os.getlogin(), "password")
+    dialog.show_message.assert_called_once_with("The following exception occured: ")
+
+
+def test_login_dialog_not_timeout(qtbot: pytest.fixture) -> None:
+    import socket
+
+    mock_agent = MagicMock(spec=pyoncat.ONCat)
+    mock_agent.login.side_effect = socket.timeout
+    dialog = ONCatLoginDialog(agent=mock_agent)
+    mock_agent.timeout = 10.0
+    dialog.show_message = MagicMock()
+    qtbot.addWidget(dialog)
+    dialog.show()
+    qtbot.keyClicks(dialog.user_pwd, "password")
+    qtbot.wait(2000)
+    assert dialog.user_pwd.text() == "password"
+    qtbot.mouseClick(dialog.button_login, QtCore.Qt.LeftButton)
+    mock_agent.call_count == 0
+
+
 def test_login_dialog_no_password(qtbot: pytest.fixture) -> None:
     mock_agent = MagicMock(spec=pyoncat.ONCat)
     mock_agent.login.side_effect = pyoncat.LoginRequiredError
