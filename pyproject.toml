@@ -104,11 +104,13 @@ versioningit = "*"
 #dependencies for the conda package - for shiver to run
 mantidqt = ">=6.12"
 pyoncat = ">=2.1"
+oauthlib = "*"
 
 [tool.pixi.dependencies]
 # Conda package dependencies for the local environment though pixi
 mantidqt = ">=6.12"
 pyoncat = ">=2.1"
+oauthlib = "*"
 
 [tool.pixi.pypi-dependencies]
 # PyPI dependencies for the local environment though pixi
@@ -142,6 +144,7 @@ codecov = ">=2.1.13"
 [tool.pixi.feature.docs.dependencies]
 sphinx = ">=8"
 sphinx_rtd_theme = ">=3.0.1"
+sphinxcontrib-mermaid = "*"
 
 #pytest
 [tool.pixi.feature.test.dependencies]
@@ -153,8 +156,8 @@ pytest-xvfb = ">=3.1.1"
 
 [tool.pixi.tasks]
 # Documentation
-build-docs = { cmd = 'sphinx-build -b html docs/source/ docs/_build/html', description = "Build documentation" }
-test-docs = { cmd = "sphinx-build -M doctest docs/source/ docs/_build/html", description = "Test building the documentation" }
+build-docs = { cmd = 'sphinx-build -b html docs/ docs/_build/html', description = "Build documentation" }
+test-docs = { cmd = "sphinx-build -M doctest docs/ docs/_build/html", description = "Test building the documentation" }
 # Testing
 test = { description = "Run the test suite", cmd = "pytest" }
 # Packaging
