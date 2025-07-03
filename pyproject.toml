@@ -137,7 +137,7 @@ toml-cli = "*"
 pip = ">=25.1.1"
 pip-audit = ">=2.9.0"
 pre-commit = ">=4.2.0"
-pylint = "*"
+ruff = "*"
 codecov = ">=2.1.13"
 
 #readthedocs
