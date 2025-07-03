@@ -1,4 +1,6 @@
-**pyoncatqt README**
+## Project Overview
+pyoncatqt is a Python package designed to enhance the graphical user interface (GUI) experience for developers using the pyoncat library. pyoncat is a Python package for interacting with the ONCat API.
+
 ## Installation
 
 Create and activate a virtual environment with [Pixi](https://pixi.sh/).
@@ -68,6 +70,3 @@ To set the pre-commit hook before each git commit
 pre-commit install
 
 ```
-
-**Project Overview:**
-pyoncatqt is a Python package designed to enhance the graphical user interface (GUI) experience for developers using the pyoncat library. pyoncat is a Python package for interacting with the ONCat API.
