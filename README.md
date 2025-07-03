@@ -1,7 +1,7 @@
 ## Project Overview
 pyoncatqt is a Python package designed to enhance the graphical user interface (GUI) experience for developers using the pyoncat library. pyoncat is a Python package for interacting with the ONCat API.
 
-## Installation
+**Installation**
 
 Create and activate a virtual environment with [Pixi](https://pixi.sh/).
 Prerequisites: Pixi installation e.g. for Linux:
