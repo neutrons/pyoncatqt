@@ -24,6 +24,13 @@ pixi shell
 
 ```
 
+List the tasks that can run the machine
+
+```bash
+pixi task list
+
+```
+
 The pyoncatqt environment is activated and the application is ready to use.
 
 
