@@ -24,7 +24,7 @@ pixi shell
 
 ```
 
-List the tasks that can run the machine
+List the pixi tasks that can run the machine
 
 ```bash
 pixi task list
