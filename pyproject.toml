@@ -39,7 +39,7 @@ file = "src/pyoncatqt/_version.py"
 
 [tool.versioningit.vcs]
 method = "git"
-default-tag = "4.0.0"
+default-tag = "0.0.1"
 
 [tool.versioningit.next-version]
 method = "minor"
@@ -69,6 +69,7 @@ omit = ["src/pyoncatqt/_version.py"]
 
 [tool.ruff]
 line-length = 120
+exclude = ["tests/data/token.json"]
 
 [tool.ruff.lint]
 # https://beta.ruff.rs/docs/rules/
