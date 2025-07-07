@@ -116,6 +116,7 @@ jobs:
     name: Publish
     runs-on: ubuntu-24.04
     needs: [tests, conda-verify]
+    if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -142,15 +143,15 @@ jobs:
           FILE_NAME=$(ls ./${{ env.PKG_NAME }}-*.conda)
           echo "Conda package file to publish: $FILE_NAME"
 
-      # - name: Upload package to anaconda
-      #   shell: bash -l {0}
-      #   if: startsWith(github.ref, 'refs/tags/v')
-      #   env:
-      #     ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_TOKEN }}
-      #     IS_RC: ${{ contains(github.ref, 'rc') }}
-      #   run: |
-      #     # label is main or rc depending on the tag-name
-      #     CONDA_LABEL="main"
-      #     if [ "${IS_RC}" = "true" ]; then CONDA_LABEL="rc"; fi
-      #     echo pushing ${{ github.ref }} with label $CONDA_LABEL
-      #     pixi run anaconda upload --label $CONDA_LABEL --user neutrons ${{ env.PKG_NAME }}-*.conda
+      - name: Upload package to anaconda
+        shell: bash -l {0}
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_TOKEN }}
+          IS_RC: ${{ contains(github.ref, 'rc') }}
+        run: |
+          # label is main or rc depending on the tag-name
+          CONDA_LABEL="main"
+          if [ "${IS_RC}" = "true" ]; then CONDA_LABEL="rc"; fi
+          echo pushing ${{ github.ref }} with label $CONDA_LABEL
+          pixi run anaconda upload --label $CONDA_LABEL --user neutrons ${{ env.PKG_NAME }}-*.conda
