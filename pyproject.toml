@@ -104,13 +104,13 @@ versioningit = "*"
 [tool.pixi.package.run-dependencies]
 #dependencies for the conda package - for shiver to run
 mantidqt = ">=6.12"
-pyoncat = ">=2.1"
+pyoncat = ">=2.6"
 oauthlib = "*"
 
 [tool.pixi.dependencies]
 # Conda package dependencies for the local environment though pixi
 mantidqt = ">=6.12"
-pyoncat = ">=2.1"
+pyoncat = ">=2.6"
 oauthlib = "*"
 
 [tool.pixi.pypi-dependencies]
