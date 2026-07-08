@@ -250,7 +250,7 @@ class ONCatLogin(QGroupBox):
             # Pass in token getter/setter callbacks here:
             token_getter=self.read_token,
             token_setter=self.write_token,
-            flow=pyoncat.RESOURCE_OWNER_CREDENTIALS_FLOW,
+            flow=pyoncat.DEVICE_AUTHORIZATION_FLOW,
             timeout=self.timeout,
         )
 
