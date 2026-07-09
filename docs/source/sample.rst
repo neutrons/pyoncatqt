@@ -89,9 +89,8 @@ the token to a JSON file.
 
     import pyoncat
 
-    # This is a temporary "client ID" intended for use in this tutorial **only**.
-    # For your own work, please contact ONCat Support to be issued your own credentials.
-    CLIENT_ID = "c0686270-e983-4c71-bd0e-bfa47243a47f"
+    # Public client ID. Can be shared and checked into version control:
+    CLIENT_ID = "eaeb036a-2602-4bb9-8530-0bb5812da7a1"
 
     # We will use the testing version of ONCat for this sample.
     ONCAT_URL = "https://oncat-testing.ornl.gov"
@@ -133,7 +132,7 @@ The following example demonstrates how to use the `ONCatLoginDialog` in a PyQt a
             self.setWindowTitle("ONCat Login Example")
 
             # Create an instance of the pyoncat agent pyoncat.ONCat
-            CLIENT_ID = "c0686270-e983-4c71-bd0e-bfa47243a47f"
+            CLIENT_ID = "eaeb036a-2602-4bb9-8530-0bb5812da7a1"
 
             ONCAT_URL = "https://oncat-testing.ornl.gov"
 
