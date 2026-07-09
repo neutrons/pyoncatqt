@@ -154,7 +154,7 @@ def test_login_dialog_nominal(qtbot: pytest.fixture) -> None:
     qtbot.wait(2000)
     assert dialog.user_pwd.text() == "password"
     qtbot.mouseClick(dialog.button_login, QtCore.Qt.LeftButton)
-    assert agent.login.called_once_with(os.getlogin(), "password")
+    agent.login.assert_called_once_with(os.getlogin(), "password")
 
 
 def test_login_dialog_timeout(qtbot: pytest.fixture) -> None:
@@ -247,7 +247,7 @@ def test_login_dialog_no_agent(qtbot: pytest.fixture) -> None:
     with patch("pyoncatqt.login.ONCatLoginDialog.show_message"):
         dialog = ONCatLoginDialog()
         qtbot.addWidget(dialog)
-        assert dialog.show_message.called_once_with("No Agent provided for login.")
+        dialog.show_message.assert_called_once_with("No Agent provided for login")
 
 
 def test_read_token(qtbot: pytest.fixture, token_path: pytest.fixture) -> None:
