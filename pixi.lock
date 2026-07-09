@@ -614,11 +614,7 @@ packages:
   - python_abi 3.12.* *_cp312
   license: MIT
   purls:
-<<<<<<< HEAD
-  - pkg:pypi/cffi?source=compressed-mapping
-=======
   - pkg:pypi/cffi?source=hash-mapping
->>>>>>> origin
   run_exports: {}
   size: 302926
   timestamp: 1783424167115
@@ -651,11 +647,7 @@ packages:
   license: Apache-2.0
   license_family: APACHE
   purls:
-<<<<<<< HEAD
-  - pkg:pypi/coverage?source=hash-mapping
-=======
   - pkg:pypi/coverage?source=compressed-mapping
->>>>>>> origin
   run_exports: {}
   size: 394452
   timestamp: 1783019257881
@@ -3566,11 +3558,7 @@ packages:
   license: Apache-2.0
   license_family: Apache
   purls:
-<<<<<<< HEAD
-  - pkg:pypi/tornado?source=hash-mapping
-=======
   - pkg:pypi/tornado?source=compressed-mapping
->>>>>>> origin
   run_exports: {}
   size: 864705
   timestamp: 1781006801632
