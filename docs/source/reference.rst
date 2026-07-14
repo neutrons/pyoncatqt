@@ -5,12 +5,11 @@ ONCatLogin
 ----------
 
 .. module:: ONCatLogin
-.. automodule:: pyoncatqt.login.ONCatLogin
+.. autoclass:: pyoncatqt.login.ONCatLogin
     :members:
 
-ONCatLoginDialog
-----------------
+VerificationDialog
+------------------
 
-.. module:: ONCatLoginDialog
-.. automodule:: pyoncatqt.login.ONCatLoginDialog
+.. autoclass:: pyoncatqt.login.VerificationDialog
     :members:

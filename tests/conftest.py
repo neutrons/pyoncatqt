@@ -12,11 +12,6 @@ def _config_path(monkeypatch: pytest.fixture) -> None:
     monkeypatch.setattr(pyoncatqt.configuration, "CONFIG_PATH_FILE", configuration_path)
 
 
-@pytest.fixture(autouse=True)
-def _get_login(monkeypatch: pytest.fixture) -> None:
-    monkeypatch.setattr(os, "getlogin", lambda: "test")
-
-
 @pytest.fixture
 def token_path() -> str:
     return "tests/data/token.json"
