@@ -1,10 +1,13 @@
 import json
 import os
 import threading
+from pathlib import Path
+from typing import NoReturn
 from unittest.mock import MagicMock, patch
 
 import pyoncat
 import pytest
+from pytestqt.qtbot import QtBot
 from qtpy.QtWidgets import QDialog, QPushButton
 
 from pyoncatqt.login import (
@@ -19,7 +22,7 @@ from pyoncatqt.login import (
 # ---------------------------------------------------------------------------
 
 
-def _make_widget(qtbot):
+def _make_widget(qtbot: QtBot) -> ONCatLogin:
     w = ONCatLogin(key="test")
     qtbot.addWidget(w)
     return w
@@ -30,7 +33,8 @@ def _make_widget(qtbot):
 # ---------------------------------------------------------------------------
 
 
-def test_background_call_success(qtbot):
+@pytest.mark.usefixtures("qtbot")
+def test_background_call_success() -> None:
     results, errors, finished = [], [], []
     worker = BackgroundCall(lambda: 42)
     worker.succeeded.connect(results.append)
@@ -42,10 +46,11 @@ def test_background_call_success(qtbot):
     assert finished == [True]
 
 
-def test_background_call_failure(qtbot):
+@pytest.mark.usefixtures("qtbot")
+def test_background_call_failure() -> None:
     err = RuntimeError("boom")
 
-    def bad():
+    def bad() -> NoReturn:
         raise err
 
     worker = BackgroundCall(bad)
@@ -62,7 +67,8 @@ def test_background_call_failure(qtbot):
 # ---------------------------------------------------------------------------
 
 
-def test_challenge_relay_emits_signal(qtbot):
+@pytest.mark.usefixtures("qtbot")
+def test_challenge_relay_emits_signal() -> None:
     relay = ChallengeRelay()
     challenge = MagicMock()
     received = []
@@ -76,7 +82,7 @@ def test_challenge_relay_emits_signal(qtbot):
 # ---------------------------------------------------------------------------
 
 
-def test_verification_dialog_creation(qtbot):
+def test_verification_dialog_creation(qtbot: QtBot) -> None:
     dialog = VerificationDialog("https://example.com/auth?code=ABCD", "ABCD-1234")
     qtbot.addWidget(dialog)
     assert isinstance(dialog, QDialog)
@@ -84,14 +90,14 @@ def test_verification_dialog_creation(qtbot):
     assert isinstance(dialog.button_cancel, QPushButton)
 
 
-def test_verification_dialog_cancel_emits_signal(qtbot):
+def test_verification_dialog_cancel_emits_signal(qtbot: QtBot) -> None:
     dialog = VerificationDialog("https://example.com", "XYZW")
     qtbot.addWidget(dialog)
     with qtbot.waitSignal(dialog.cancelled, timeout=1000):
         dialog.close()
 
 
-def test_verification_dialog_resolve_suppresses_cancel(qtbot):
+def test_verification_dialog_resolve_suppresses_cancel(qtbot: QtBot) -> None:
     dialog = VerificationDialog("https://example.com", "XYZW")
     qtbot.addWidget(dialog)
     emitted = []
@@ -107,7 +113,7 @@ def test_verification_dialog_resolve_suppresses_cancel(qtbot):
 # ---------------------------------------------------------------------------
 
 
-def test_login_key(qtbot):
+def test_login_key(qtbot: QtBot) -> None:
     widget = ONCatLogin(key="test")
     qtbot.addWidget(widget)
     assert widget.client_id == "0123456489"
@@ -115,7 +121,7 @@ def test_login_key(qtbot):
     assert widget.agent is not None
 
 
-def test_login_client_id(qtbot):
+def test_login_client_id(qtbot: QtBot) -> None:
     client_id = "12cnfjejsfsdf3456789ab"
     widget = ONCatLogin(client_id=client_id)
     qtbot.addWidget(widget)
@@ -123,7 +129,7 @@ def test_login_client_id(qtbot):
     assert widget.token_path.endswith(f"{client_id[0:8]}_token.json")
 
 
-def test_login_client_id_key(qtbot):
+def test_login_client_id_key(qtbot: QtBot) -> None:
     client_id = "12cnfjejsfsdf3456789ab"
     key = "test"
     widget = ONCatLogin(client_id=client_id, key=key)
@@ -137,7 +143,7 @@ def test_login_client_id_key(qtbot):
 # ---------------------------------------------------------------------------
 
 
-def test_get_agent(qtbot):
+def test_get_agent(qtbot: QtBot) -> None:
     widget = _make_widget(qtbot)
     mock_agent = MagicMock()
     widget.agent = mock_agent
@@ -149,7 +155,7 @@ def test_get_agent(qtbot):
 # ---------------------------------------------------------------------------
 
 
-def test_is_connected_no_token(qtbot):
+def test_is_connected_no_token(qtbot: QtBot) -> None:
     """No stored token: return False without any network call."""
     w = _make_widget(qtbot)
     mock_agent = MagicMock()
@@ -159,7 +165,7 @@ def test_is_connected_no_token(qtbot):
     mock_agent.Facility.list.assert_not_called()
 
 
-def test_is_connected_success(qtbot):
+def test_is_connected_success(qtbot: QtBot) -> None:
     w = _make_widget(qtbot)
     mock_agent = MagicMock()
     mock_agent.has_stored_token.return_value = True
@@ -168,7 +174,7 @@ def test_is_connected_success(qtbot):
     assert w.is_connected is True
 
 
-def test_is_connected_invalid_refresh(qtbot):
+def test_is_connected_invalid_refresh(qtbot: QtBot) -> None:
     w = _make_widget(qtbot)
     mock_agent = MagicMock()
     mock_agent.has_stored_token.return_value = True
@@ -177,7 +183,7 @@ def test_is_connected_invalid_refresh(qtbot):
     assert w.is_connected is False
 
 
-def test_is_connected_interaction_required(qtbot):
+def test_is_connected_interaction_required(qtbot: QtBot) -> None:
     w = _make_widget(qtbot)
     mock_agent = MagicMock()
     mock_agent.has_stored_token.return_value = True
@@ -186,7 +192,7 @@ def test_is_connected_interaction_required(qtbot):
     assert w.is_connected is False
 
 
-def test_is_connected_login_required(qtbot):
+def test_is_connected_login_required(qtbot: QtBot) -> None:
     w = _make_widget(qtbot)
     mock_agent = MagicMock()
     mock_agent.has_stored_token.return_value = True
@@ -195,7 +201,7 @@ def test_is_connected_login_required(qtbot):
     assert w.is_connected is False
 
 
-def test_is_connected_other_exception(qtbot):
+def test_is_connected_other_exception(qtbot: QtBot) -> None:
     w = _make_widget(qtbot)
     mock_agent = MagicMock()
     mock_agent.has_stored_token.return_value = True
@@ -209,7 +215,7 @@ def test_is_connected_other_exception(qtbot):
 # ---------------------------------------------------------------------------
 
 
-def test_connect_to_oncat_already_connected(qtbot):
+def test_connect_to_oncat_already_connected(qtbot: QtBot) -> None:
     """A working session skips sign-in and refreshes status."""
     w = _make_widget(qtbot)
     mock_agent = MagicMock()
@@ -224,7 +230,7 @@ def test_connect_to_oncat_already_connected(qtbot):
     assert "Connected" in w.status_label.text()
 
 
-def test_connect_to_oncat_starts_sign_in(qtbot):
+def test_connect_to_oncat_starts_sign_in(qtbot: QtBot) -> None:
     """Not connected: background job is started with agent.login and a cancel_event.
 
     _run_in_background is patched so the work and callbacks can be driven
@@ -254,7 +260,7 @@ def test_connect_to_oncat_starts_sign_in(qtbot):
     assert w.oncat_button.isEnabled() is True
 
 
-def test_connect_to_oncat_in_progress_ignored(qtbot):
+def test_connect_to_oncat_in_progress_ignored(qtbot: QtBot) -> None:
     """A second click while a sign-in is running is a no-op."""
     w = _make_widget(qtbot)
     mock_agent = MagicMock()
@@ -267,7 +273,7 @@ def test_connect_to_oncat_in_progress_ignored(qtbot):
     mock_agent.login.assert_not_called()
 
 
-def test_connect_to_oncat_clears_stale_token(qtbot, tmp_path):
+def test_connect_to_oncat_clears_stale_token(qtbot: QtBot, tmp_path: Path) -> None:
     """A stale token file is removed before the device flow starts.
 
     _clear_stored_token is called synchronously in connect_to_oncat before
@@ -294,7 +300,7 @@ def test_connect_to_oncat_clears_stale_token(qtbot, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_show_verification(qtbot):
+def test_show_verification(qtbot: QtBot) -> None:
     w = _make_widget(qtbot)
     challenge = MagicMock()
     challenge.verification_uri = "https://example.com/auth"
@@ -316,7 +322,7 @@ def test_show_verification(qtbot):
 # ---------------------------------------------------------------------------
 
 
-def test_on_cancel_requested(qtbot):
+def test_on_cancel_requested(qtbot: QtBot) -> None:
     w = _make_widget(qtbot)
     cancel_event = threading.Event()
     w._cancel_event = cancel_event
@@ -332,7 +338,7 @@ def test_on_cancel_requested(qtbot):
 # ---------------------------------------------------------------------------
 
 
-def test_on_sign_in_error_cancelled(qtbot):
+def test_on_sign_in_error_cancelled(qtbot: QtBot) -> None:
     """DeviceAuthorizationCancelled does not show a warning dialog."""
     w = _make_widget(qtbot)
     mock_agent = MagicMock()
@@ -347,7 +353,7 @@ def test_on_sign_in_error_cancelled(qtbot):
     assert w.oncat_button.isEnabled() is True
 
 
-def test_on_sign_in_error_shows_messagebox(qtbot):
+def test_on_sign_in_error_shows_messagebox(qtbot: QtBot) -> None:
     """Any other error shows a QMessageBox warning with the error text."""
     w = _make_widget(qtbot)
     mock_agent = MagicMock()
@@ -368,7 +374,7 @@ def test_on_sign_in_error_shows_messagebox(qtbot):
 # ---------------------------------------------------------------------------
 
 
-def test_read_token(qtbot, token_path):
+def test_read_token(qtbot: QtBot, token_path: str) -> None:
     widget = _make_widget(qtbot)
     widget.token_path = token_path
     test_token = widget.read_token()
@@ -377,7 +383,7 @@ def test_read_token(qtbot, token_path):
     assert test_token == actual_token
 
 
-def test_write_token(qtbot, token_path):
+def test_write_token(qtbot: QtBot, token_path: str) -> None:
     widget = _make_widget(qtbot)
     widget.token_path = token_path
     with open(token_path, "r") as f:
@@ -387,7 +393,7 @@ def test_write_token(qtbot, token_path):
         assert f.read() == json.dumps(actual_token)
 
 
-def test_clear_stored_token(qtbot, tmp_path):
+def test_clear_stored_token(qtbot: QtBot, tmp_path: Path) -> None:
     widget = _make_widget(qtbot)
     token_file = tmp_path / "token.json"
     token_file.write_text('{"access_token": "abc"}')
@@ -396,7 +402,7 @@ def test_clear_stored_token(qtbot, tmp_path):
     assert not token_file.exists()
 
 
-def test_clear_stored_token_no_file(qtbot, tmp_path):
+def test_clear_stored_token_no_file(qtbot: QtBot, tmp_path: Path) -> None:
     """Calling _clear_stored_token when no file exists does not raise."""
     widget = _make_widget(qtbot)
     widget.token_path = str(tmp_path / "nonexistent.json")
