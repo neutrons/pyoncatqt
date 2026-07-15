@@ -230,6 +230,13 @@ class ONCatLogin(QGroupBox):
         self.oncat_button.clicked.connect(self.connect_to_oncat)
         self.oncat_options_layout.addWidget(self.oncat_button, 4, 1)
 
+        # Log out of OnCat button
+        self.logout_button = QPushButton("&Log out of ONCat")
+        self.logout_button.setFixedWidth(300)
+        self.logout_button.setToolTip("Log out of ONCat and revoke the current session.")
+        self.logout_button.clicked.connect(self.disconnect_from_oncat)
+        self.oncat_options_layout.addWidget(self.logout_button, 5, 1)
+
         self.timeout = timeout
 
         self.oncat_url = get_data("login.oncat", "oncat_url")
@@ -276,13 +283,18 @@ class ONCatLogin(QGroupBox):
 
     def update_connection_status(self: QGroupBox) -> None:
         """Update connection status"""
-        if self.is_connected:
+        connected = self.is_connected
+        if connected:
             self.status_label.setText("ONCat: Connected")
             self.status_label.setStyleSheet("color: green")
         else:
             self.status_label.setText("ONCat: Disconnected")
             self.status_label.setStyleSheet("color: red")
-        self.connection_updated.emit(self.is_connected)
+        # Only allow connecting while disconnected and logging out while
+        # there is a live session to act on.
+        self.oncat_button.setEnabled(not connected)
+        self.logout_button.setEnabled(connected)
+        self.connection_updated.emit(connected)
 
     @property
     def is_connected(self: QGroupBox) -> bool:
@@ -356,6 +368,46 @@ class ONCatLogin(QGroupBox):
             self._on_sign_in_error,
         )
 
+    def disconnect_from_oncat(self: QGroupBox) -> None:
+        """Log out of OnCat, revoking the current session.
+
+        ``logout()`` revokes the refresh token server-side rather than only
+        clearing it locally, so it does network I/O and must run on a worker
+        thread. The connection status is refreshed once it resolves.
+        """
+        # Ignore repeat clicks while another job is already in progress.
+        if self._thread is not None:
+            return
+
+        self.logout_button.setEnabled(False)
+        self.oncat_button.setEnabled(False)
+        self.status_label.setText("ONCat: Logging out...")
+        self._run_in_background(
+            self.agent.logout,
+            self._on_logout_ok,
+            self._on_logout_error,
+        )
+
+    def _on_logout_ok(self: QGroupBox, _: object) -> None:
+        """Finish a successful logout and refresh the connection status."""
+        self._clear_stored_token()
+        self.update_connection_status()
+
+    def _on_logout_error(self: QGroupBox, error: BaseException) -> None:
+        """Report a failed server-side logout and refresh the status.
+
+        The local token is cleared regardless, so this session is unusable
+        here; surface the server-side revocation failure rather than claim a
+        clean logout.
+        """
+        self._clear_stored_token()
+        QMessageBox.warning(
+            self,
+            "ONCat",
+            f"Logged out on this device, but ONCat could not revoke the session server-side:\n{error}",
+        )
+        self.update_connection_status()
+
     def _run_in_background(
         self: QGroupBox,
         work: Callable[[], object],
@@ -402,14 +454,12 @@ class ONCatLogin(QGroupBox):
         """Finish a successful sign-in and refresh the connection status."""
         self._close_dialog()
         self._cancel_event = None
-        self.oncat_button.setEnabled(True)
         self.update_connection_status()
 
     def _on_sign_in_error(self: QGroupBox, error: BaseException) -> None:
         """Report a failed or cancelled sign-in and refresh the status."""
         self._close_dialog()
         self._cancel_event = None
-        self.oncat_button.setEnabled(True)
         if not isinstance(error, pyoncat.DeviceAuthorizationCancelled):
             QMessageBox.warning(self, "ONCat", str(error))
         self.update_connection_status()
