@@ -410,6 +410,52 @@ def test_on_sign_in_error_shows_messagebox(qtbot: QtBot) -> None:
 
 
 # ---------------------------------------------------------------------------
+# closeEvent / background-job shutdown
+# ---------------------------------------------------------------------------
+
+
+def test_close_stops_active_background_job(qtbot: QtBot) -> None:
+    """Closing the widget while a sign-in is running cancels and joins the thread.
+
+    The worker blocks on its cancel_event, standing in for PyONCat's polling
+    login(); closing the widget must set the cancel event, wait for the thread
+    to finish, and leave no dangling job.
+    """
+    w = _make_widget(qtbot)
+    mock_agent = MagicMock()
+    mock_agent.has_stored_token.return_value = False
+    w.agent = mock_agent
+
+    started = threading.Event()
+
+    def fake_login(cancel_event: threading.Event) -> None:
+        started.set()
+        # Block until closeEvent requests cancellation, like the real poll loop.
+        cancel_event.wait(timeout=5)
+
+    mock_agent.login.side_effect = fake_login
+
+    w.connect_to_oncat()
+    assert started.wait(timeout=2), "background job did not start"
+    assert w._thread is not None
+
+    cancel_event = w._cancel_event
+    w.close()
+
+    # The poll loop was signalled to stop and the thread was joined.
+    assert cancel_event.is_set()
+    qtbot.waitUntil(lambda: w._thread is None, timeout=2000)
+
+
+def test_close_with_no_active_job_is_noop(qtbot: QtBot) -> None:
+    """Closing an idle widget does not raise and leaves no job behind."""
+    w = _make_widget(qtbot)
+    assert w._thread is None
+    w.close()
+    assert w._thread is None
+
+
+# ---------------------------------------------------------------------------
 # Token persistence
 # ---------------------------------------------------------------------------
 

@@ -534,6 +534,48 @@ class ONCatLogin(QGroupBox):
         self._thread = None
         self._worker = None
 
+    def closeEvent(self: QGroupBox, event: QCloseEvent) -> None:
+        """Stop any in-flight background job before the widget is torn down.
+
+        The worker thread is unparented and its ``succeeded``/``failed``
+        signals are wired to bound methods on this widget. If the widget were
+        destroyed mid-job, a late-finishing worker could call back into a
+        half-destroyed C++ object. Cancel the poll loop where possible, detach
+        the outcome callbacks so nothing outlives the widget, then stop and
+        wait for the thread.
+        """
+        self._shutdown_background()
+        super().closeEvent(event)
+
+    def _shutdown_background(self: QGroupBox) -> None:
+        """Cancel, detach, and join any running background job.
+
+        Complements the normal :meth:`_clear_job` teardown path, which handles
+        jobs that finish on their own; this handles the case where the widget
+        closes while a job is still running.
+        """
+        thread = self._thread
+        if thread is None:
+            return
+        # Unblock a sign-in poll loop; logout/probe have no cancel hook and
+        # simply run to completion (bounded by the agent request timeout).
+        if self._cancel_event is not None:
+            self._cancel_event.set()
+        # Detach the outcome callbacks so a late-finishing job cannot call back
+        # into a widget that is being destroyed. The finished chain (quit /
+        # deleteLater / _clear_job) is left intact so the thread still cleans
+        # itself up.
+        worker = self._worker
+        if worker is not None:
+            try:
+                worker.succeeded.disconnect()
+                worker.failed.disconnect()
+            except (RuntimeError, TypeError):
+                pass
+        # Stop the event loop and block until the worker has returned.
+        thread.quit()
+        thread.wait()
+
     @Slot(object)
     def _show_verification(self: QGroupBox, challenge: "pyoncat.DeviceAuthorizationChallenge") -> None:
         """Build and show the verification dialog on the GUI thread."""
