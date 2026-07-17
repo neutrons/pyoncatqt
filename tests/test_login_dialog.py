@@ -352,13 +352,15 @@ def test_connect_to_oncat_clears_stale_token(qtbot: QtBot, tmp_path: Path) -> No
     w.token_path = str(token_file)
 
     mock_agent = MagicMock()
-    mock_agent.has_stored_token.return_value = False
+    mock_agent.has_stored_token.return_value = True
+    mock_agent.Facility.list.side_effect = pyoncat.InvalidRefreshTokenError
     w.agent = mock_agent
 
-    with patch.object(w, "_run_in_background"):
+    with patch.object(w, "_run_in_background") as run_bg:
         w.connect_to_oncat()
 
     assert not token_file.exists()
+    run_bg.assert_called_once()
 
 
 def test_connect_to_oncat_preserves_token_on_network_error(qtbot: QtBot, tmp_path: Path) -> None:

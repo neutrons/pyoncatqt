@@ -361,6 +361,12 @@ class ONCatLogin(QGroupBox):
             return
         if self._thread is not None:
             return
+        # Surface a "checking" state and disable both actions while the probe
+        # is in flight; _on_probe_done/_on_probe_error restore the label and
+        # enabled state via update_connection_status.
+        self.oncat_button.setEnabled(False)
+        self.logout_button.setEnabled(False)
+        self.status_label.setText("ONCat: Checking session...")
         self._run_in_background(
             lambda: self.is_connected,
             self._on_probe_done,

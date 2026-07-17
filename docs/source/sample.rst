@@ -81,10 +81,10 @@ need to build one yourself. It accepts either a ``key`` or a ``client_id``:
 - If ``key`` (an application name) is passed, the client ID is looked up from the pyoncatqt
   configuration file, provided an entry exists for it.
 - If ``client_id`` is passed, it is used directly.
-- If both are passed, ``client_id`` is used for the ONCat agent and ``key`` is ignored.
+- If both are passed, ``client_id`` configures the agent while ``key`` still names the token file.
 
-The widget derives a per-client token filename from the client ID and stores the user's
-authentication token under ``~/.pyoncatqt/``.
+Without ``key``, the token filename uses the client-ID prefix; with ``key``, it uses the key.
+The token is stored under ``~/.pyoncatqt/``.
 
 Browser-Based Sign-In (Device Authorization Grant)
 --------------------------------------------------
@@ -133,4 +133,4 @@ Pass ``login_title`` to override the title of the sign-in dialog window (it defa
 
 .. code:: python
 
-    self.oncat_widget = ONCatLogin(key="", login_title="Connect to ONCat", parent=self)
+    self.oncat_widget = ONCatLogin(key="client", login_title="Connect to ONCat", parent=self)
