@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pyoncat
 import pytest
+import requests
 from pytestqt.qtbot import QtBot
 from qtpy.QtWidgets import QDialog, QPushButton
 
@@ -210,6 +211,16 @@ def test_is_connected_other_exception(qtbot: QtBot) -> None:
     assert w.is_connected is False
 
 
+def test_is_connected_network_error(qtbot: QtBot) -> None:
+    """A transport-layer failure reports "not connected" without raising."""
+    w = _make_widget(qtbot)
+    mock_agent = MagicMock()
+    mock_agent.has_stored_token.return_value = True
+    mock_agent.Facility.list.side_effect = requests.exceptions.ConnectionError
+    w.agent = mock_agent
+    assert w.is_connected is False
+
+
 # ---------------------------------------------------------------------------
 # connect_to_oncat
 # ---------------------------------------------------------------------------
@@ -255,9 +266,12 @@ def test_connect_to_oncat_starts_sign_in(qtbot: QtBot) -> None:
     _, kwargs = mock_agent.login.call_args
     assert isinstance(kwargs.get("cancel_event"), threading.Event)
 
-    # calling on_success simulates the thread completing successfully
+    # calling on_success simulates the thread completing successfully; a
+    # successful sign-in leaves the widget connected, so the connect button is
+    # disabled and the logout button enabled.
     on_success(None)
-    assert w.oncat_button.isEnabled() is True
+    assert w.oncat_button.isEnabled() is False
+    assert w.logout_button.isEnabled() is True
 
 
 def test_connect_to_oncat_in_progress_ignored(qtbot: QtBot) -> None:
@@ -293,6 +307,32 @@ def test_connect_to_oncat_clears_stale_token(qtbot: QtBot, tmp_path: Path) -> No
         w.connect_to_oncat()
 
     assert not token_file.exists()
+
+
+def test_connect_to_oncat_preserves_token_on_network_error(qtbot: QtBot, tmp_path: Path) -> None:
+    """A transient connectivity failure keeps the token and starts no sign-in.
+
+    Clearing the token on a network blip would force a needless
+    re-authorization once connectivity returns, so the stored token must
+    survive and no interactive sign-in should be launched.
+    """
+    w = _make_widget(qtbot)
+    token_file = tmp_path / "live_token.json"
+    token_file.write_text('{"access_token": "live"}')
+    w.token_path = str(token_file)
+
+    mock_agent = MagicMock()
+    mock_agent.has_stored_token.return_value = True
+    mock_agent.Facility.list.side_effect = requests.exceptions.ConnectionError
+    w.agent = mock_agent
+
+    with patch.object(w, "_run_in_background") as run_bg, patch("pyoncatqt.login.QMessageBox.warning") as warn:
+        w.connect_to_oncat()
+
+    assert token_file.exists()
+    run_bg.assert_not_called()
+    mock_agent.login.assert_not_called()
+    warn.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

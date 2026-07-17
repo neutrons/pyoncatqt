@@ -33,7 +33,7 @@ status and emits ``connection_updated``.
         layout = QVBoxLayout()
 
         # Create and add the Oncat widget
-        self.oncat_widget = ONCatLogin(key="", parent=self)
+        self.oncat_widget = ONCatLogin(key="client", parent=self)
         self.oncat_widget.connection_updated.connect(self.update_instrument_lists)
         layout.addWidget(self.oncat_widget)
 

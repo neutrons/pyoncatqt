@@ -4,6 +4,7 @@ import threading
 from typing import Any, Callable, Dict
 
 import pyoncat
+import requests
 from qtpy.QtCore import QObject, QThread, Signal, Slot
 from qtpy.QtGui import QCloseEvent
 from qtpy.QtWidgets import (
@@ -21,6 +22,14 @@ from pyoncatqt.configuration import get_data
 
 # Scopes requested for the interactive human-user session.
 ONCAT_SCOPES = ["api:read"]
+
+# Outcomes of probing the stored session. A genuinely dead/expired token
+# (NEEDS_LOGIN) must be cleared to trigger a fresh authorization; a transient
+# connectivity failure (UNREACHABLE) must leave the token intact so the session
+# survives the outage.
+_SESSION_CONNECTED = "connected"
+_SESSION_NEEDS_LOGIN = "needs_login"
+_SESSION_UNREACHABLE = "unreachable"
 
 
 class BackgroundCall(QObject):
@@ -279,11 +288,27 @@ class ONCatLogin(QGroupBox):
         self.login_dialog: VerificationDialog = None
         self._cancel_event: threading.Event = None
 
+        # Cached connection state. Probing ONCat does a blocking network
+        # round trip, so it must never run on the GUI thread;
+        # update_connection_status renders from this cache, which the worker
+        # thread refreshes via _refresh_connection_status and the login/logout
+        # callbacks keep in sync.
+        self._connected: bool = False
+
+        # Render the initial (disconnected) state, then probe in the
+        # background so a still-valid stored session is reflected without
+        # blocking the GUI thread during construction.
         self.update_connection_status()
+        self._refresh_connection_status()
 
     def update_connection_status(self: QGroupBox) -> None:
-        """Update connection status"""
-        connected = self.is_connected
+        """Render the cached connection status.
+
+        Reads the cached connection state instead of probing ONCat, so it
+        never does network I/O on the GUI thread. The cache is refreshed by
+        :meth:`_refresh_connection_status` and by the login/logout callbacks.
+        """
+        connected = self._connected
         if connected:
             self.status_label.setText("ONCat: Connected")
             self.status_label.setStyleSheet("color: green")
@@ -296,6 +321,80 @@ class ONCatLogin(QGroupBox):
         self.logout_button.setEnabled(connected)
         self.connection_updated.emit(connected)
 
+    def _refresh_connection_status(self: QGroupBox) -> None:
+        """Probe ONCat on a worker thread and refresh the cached status.
+
+        :attr:`is_connected` does a blocking network round trip, so it is run
+        through the worker infrastructure rather than on the GUI thread.
+        Without a stored token there is nothing to probe, so the cache is
+        cleared without spawning a thread; likewise, no probe is started while
+        another job (sign-in or logout) is already running.
+        """
+        if not self.agent.has_stored_token():
+            self._connected = False
+            self.update_connection_status()
+            return
+        if self._thread is not None:
+            return
+        self._run_in_background(
+            lambda: self.is_connected,
+            self._on_probe_done,
+            self._on_probe_error,
+        )
+
+    def _on_probe_done(self: QGroupBox, connected: object) -> None:
+        """Cache the worker's probe result and refresh the status."""
+        self._connected = bool(connected)
+        self.update_connection_status()
+
+    def _on_probe_error(self: QGroupBox, _: BaseException) -> None:
+        """Treat a failed probe as disconnected and refresh the status."""
+        self._connected = False
+        self.update_connection_status()
+
+    def _probe_session(self: QGroupBox) -> str:
+        """Probe the stored session and classify the outcome.
+
+        Distinguishes a genuinely invalid or expired token -- which must be
+        cleared to trigger a fresh authorization -- from a transient
+        connectivity failure, during which the token is preserved so the
+        session survives the outage rather than forcing a needless re-login.
+
+        Returns
+        -------
+        str
+            One of :data:`_SESSION_CONNECTED`, :data:`_SESSION_NEEDS_LOGIN`, or
+            :data:`_SESSION_UNREACHABLE`.
+        """
+        # Without a stored token there is no session to probe, and calling a
+        # data method would drive login() into a blocking, interactive Device
+        # Authorization Grant on the GUI thread. Report "needs login" without
+        # any network round trip.
+        if not self.agent.has_stored_token():
+            return _SESSION_NEEDS_LOGIN
+
+        try:
+            self.agent.Facility.list()
+            return _SESSION_CONNECTED
+        except (
+            pyoncat.InvalidRefreshTokenError,
+            pyoncat.InteractionRequiredError,
+            pyoncat.LoginRequiredError,
+        ):
+            # The token is dead or a fresh interactive sign-in is required.
+            return _SESSION_NEEDS_LOGIN
+        except (
+            pyoncat.DeviceAuthorizationNetworkError,
+            requests.exceptions.RequestException,
+        ):
+            # A transport-layer failure (timeout, DNS, connection refused) is
+            # not evidence the token is dead, so keep it and report the outage.
+            return _SESSION_UNREACHABLE
+        except Exception:  # noqa BLE001
+            # An unclassified failure is likewise no proof the token is dead;
+            # err on the side of preserving it.
+            return _SESSION_UNREACHABLE
+
     @property
     def is_connected(self: QGroupBox) -> bool:
         """
@@ -306,25 +405,7 @@ class ONCatLogin(QGroupBox):
         bool
             True if connected, False otherwise.
         """
-
-        # Without a stored token there is no session to probe, and calling a
-        # data method would drive login() into a blocking, interactive Device
-        # Authorization Grant on the GUI thread. Report "not connected"
-        # without any network round trip.
-        if not self.agent.has_stored_token():
-            return False
-
-        try:
-            self.agent.Facility.list()
-            return True
-        except pyoncat.InvalidRefreshTokenError:
-            return False
-        except pyoncat.InteractionRequiredError:
-            return False
-        except pyoncat.LoginRequiredError:
-            return False
-        except Exception:  # noqa BLE001
-            return False
+        return self._probe_session() == _SESSION_CONNECTED
 
     def get_agent_instance(self: QGroupBox) -> pyoncat.ONCat:
         """
@@ -348,15 +429,33 @@ class ONCatLogin(QGroupBox):
         if self._thread is not None:
             return
 
+        status = self._probe_session()
+
         # A still-valid stored session needs no interactive sign-in.
-        if self.is_connected:
+        if status == _SESSION_CONNECTED:
+            self._connected = True
             self.update_connection_status()
             return
 
-        # Otherwise discard any stale token first. The Device Authorization
-        # Grant's login() returns immediately when a token is already stored --
-        # even an expired one -- so without this the browser challenge would
-        # never appear and the click would seem to do nothing.
+        # A transient connectivity failure is not evidence the stored session
+        # is dead. Preserve the token -- clearing it would force a needless
+        # re-authorization once the outage clears -- and surface the failure
+        # instead of starting an interactive sign-in on a blip.
+        if status == _SESSION_UNREACHABLE:
+            self.update_connection_status()
+            QMessageBox.warning(
+                self,
+                "ONCat",
+                "Could not reach ONCat to verify the session. Your sign-in has "
+                "been kept; please check your connection and try again.",
+            )
+            return
+
+        # Otherwise the token is genuinely invalid or expired: discard it
+        # first. The Device Authorization Grant's login() returns immediately
+        # when a token is already stored -- even an expired one -- so without
+        # this the browser challenge would never appear and the click would
+        # seem to do nothing.
         self._clear_stored_token()
 
         self.oncat_button.setEnabled(False)
@@ -391,6 +490,7 @@ class ONCatLogin(QGroupBox):
     def _on_logout_ok(self: QGroupBox, _: object) -> None:
         """Finish a successful logout and refresh the connection status."""
         self._clear_stored_token()
+        self._connected = False
         self.update_connection_status()
 
     def _on_logout_error(self: QGroupBox, error: BaseException) -> None:
@@ -401,6 +501,7 @@ class ONCatLogin(QGroupBox):
         clean logout.
         """
         self._clear_stored_token()
+        self._connected = False
         QMessageBox.warning(
             self,
             "ONCat",
@@ -454,12 +555,14 @@ class ONCatLogin(QGroupBox):
         """Finish a successful sign-in and refresh the connection status."""
         self._close_dialog()
         self._cancel_event = None
+        self._connected = True
         self.update_connection_status()
 
     def _on_sign_in_error(self: QGroupBox, error: BaseException) -> None:
         """Report a failed or cancelled sign-in and refresh the status."""
         self._close_dialog()
         self._cancel_event = None
+        self._connected = False
         if not isinstance(error, pyoncat.DeviceAuthorizationCancelled):
             QMessageBox.warning(self, "ONCat", str(error))
         self.update_connection_status()
