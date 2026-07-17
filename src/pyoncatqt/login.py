@@ -128,7 +128,7 @@ class VerificationDialog(QDialog):
 
         self._resolved = False
         self.button_cancel = QPushButton("Cancel")
-        self.button_cancel.clicked.connect(self.close)
+        self.button_cancel.clicked.connect(self.reject)
         layout.addWidget(self.button_cancel)
 
     def resolve(self: QDialog) -> None:
@@ -139,13 +139,28 @@ class VerificationDialog(QDialog):
         """
         self._resolved = True
 
-    def closeEvent(self: QDialog, event: QCloseEvent) -> None:
-        """Route Cancel and the window frame to the cancel signal.
+    def reject(self: QDialog) -> None:
+        """Route the Cancel button and the Escape key to the cancel signal.
 
-        Dismissing the dialog any way sets the cancel event rather than
-        leaving the worker polling.
+        Qt sends both the Cancel button (wired here) and the Escape key
+        through ``reject()``, which dismisses the dialog via ``done()``
+        without firing :meth:`closeEvent`. The cancel signal is emitted here
+        so those paths do not silently leave the worker polling; the guard
+        keeps it from re-emitting after a resolved sign-in or a later close.
         """
         if not self._resolved:
+            self._resolved = True
+            self.cancelled.emit()
+        super().reject()
+
+    def closeEvent(self: QDialog, event: QCloseEvent) -> None:
+        """Route the window frame to the cancel signal.
+
+        Dismissing the dialog via the window frame sets the cancel event
+        rather than leaving the worker polling.
+        """
+        if not self._resolved:
+            self._resolved = True
             self.cancelled.emit()
         super().closeEvent(event)
 
@@ -328,7 +343,7 @@ class ONCatLogin(QGroupBox):
         # Only allow connecting while disconnected and logging out while
         # there is a live session to act on.
         self.oncat_button.setEnabled(not connected)
-        self.logout_button.setEnabled(connected)
+        self.logout_button.setEnabled(connected or self.agent.has_stored_token())
         self.connection_updated.emit(connected)
 
     def _refresh_connection_status(self: QGroupBox) -> None:

@@ -98,6 +98,58 @@ def test_verification_dialog_cancel_emits_signal(qtbot: QtBot) -> None:
         dialog.close()
 
 
+def test_verification_dialog_reject_emits_signal(qtbot: QtBot) -> None:
+    """The Cancel button / Escape path (reject) emits cancelled exactly once.
+
+    reject() dismisses the dialog via done() without firing closeEvent, so
+    it must raise the cancel signal itself, and only once.
+    """
+    dialog = VerificationDialog("https://example.com", "XYZW")
+    qtbot.addWidget(dialog)
+    emitted = []
+    dialog.cancelled.connect(lambda: emitted.append(True))
+    with qtbot.waitSignal(dialog.cancelled, timeout=1000):
+        dialog.reject()
+    # A subsequent close must not re-emit the cancel signal.
+    dialog.close()
+    qtbot.wait(100)
+    assert emitted == [True]
+
+
+def test_verification_dialog_escape_cancels_and_stops_polling(qtbot: QtBot) -> None:
+    """Pressing Escape cancels the sign-in and signals the poll loop to stop.
+
+    Escape routes through Qt's default reject(); the widget wires the
+    dialog's cancelled signal to setting the worker's cancel_event, so the
+    background poll loop is unblocked.
+    """
+    from qtpy.QtCore import Qt
+
+    w = _make_widget(qtbot)
+    w._cancel_event = threading.Event()
+
+    challenge = MagicMock()
+    challenge.verification_uri = "https://example.com/auth"
+    challenge.verification_uri_complete = None
+    challenge.user_code = "ABCD"
+    w._show_verification(challenge)
+    dialog = w.login_dialog
+    assert dialog is not None
+
+    dialog.show()
+    qtbot.waitExposed(dialog)
+    with qtbot.waitSignal(dialog.cancelled, timeout=1000):
+        qtbot.keyClick(dialog, Qt.Key_Escape)
+
+    assert w._cancel_event.is_set()
+    assert "Cancelling" in w.status_label.text()
+
+    dialog.resolve()
+    dialog.close()
+    w.login_dialog = None
+    QApplication.instance().processEvents()
+
+
 def test_verification_dialog_resolve_suppresses_cancel(qtbot: QtBot) -> None:
     dialog = VerificationDialog("https://example.com", "XYZW")
     qtbot.addWidget(dialog)
