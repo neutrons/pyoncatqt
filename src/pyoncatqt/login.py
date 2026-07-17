@@ -8,6 +8,7 @@ import requests
 from qtpy.QtCore import QObject, QThread, Signal, Slot
 from qtpy.QtGui import QCloseEvent
 from qtpy.QtWidgets import (
+    QApplication,
     QDialog,
     QGridLayout,
     QGroupBox,
@@ -287,6 +288,15 @@ class ONCatLogin(QGroupBox):
         self._worker: BackgroundCall = None
         self.login_dialog: VerificationDialog = None
         self._cancel_event: threading.Event = None
+        # Latched once teardown begins so queued challenges cannot reopen the
+        # verification dialog after the widget is on its way out.
+        self._closing: bool = False
+
+        # A parent window closing does not deliver a closeEvent to this child
+        # widget, so also tear down when the application is shutting down.
+        app = QApplication.instance()
+        if app is not None:
+            app.aboutToQuit.connect(self._shutdown_background)
 
         # Cached connection state. Probing ONCat does a blocking network
         # round trip, so it must never run on the GUI thread;
@@ -552,8 +562,24 @@ class ONCatLogin(QGroupBox):
 
         Complements the normal :meth:`_clear_job` teardown path, which handles
         jobs that finish on their own; this handles the case where the widget
-        closes while a job is still running.
+        (or its host window/application) shuts down while a job is still
+        running. Idempotent: safe to invoke from both :meth:`closeEvent` and
+        the application's ``aboutToQuit`` signal.
         """
+        if self._closing:
+            return
+        # Latch first so a challenge already queued on the GUI thread cannot
+        # rebuild the verification dialog once teardown has begun.
+        self._closing = True
+        # Stop routing any further (or in-flight queued) challenges to the GUI.
+        try:
+            self._relay.show_verification.disconnect(self._show_verification)
+        except (RuntimeError, TypeError):
+            pass
+        # Close any dialog currently awaiting browser approval; resolve() keeps
+        # this teardown close from being read as a user cancellation.
+        self._close_dialog()
+
         thread = self._thread
         if thread is None:
             return
@@ -578,7 +604,14 @@ class ONCatLogin(QGroupBox):
 
     @Slot(object)
     def _show_verification(self: QGroupBox, challenge: "pyoncat.DeviceAuthorizationChallenge") -> None:
-        """Build and show the verification dialog on the GUI thread."""
+        """Build and show the verification dialog on the GUI thread.
+
+        A challenge may still be sitting queued on the GUI thread when teardown
+        begins; reject it once closing so a dialog is never reopened on a widget
+        that is going away.
+        """
+        if self._closing:
+            return
         self.status_label.setText("ONCat: Waiting for browser approval...")
         link = challenge.verification_uri_complete or challenge.verification_uri
         self.login_dialog = VerificationDialog(link, challenge.user_code, parent=self)

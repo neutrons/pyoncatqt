@@ -9,7 +9,7 @@ import pyoncat
 import pytest
 import requests
 from pytestqt.qtbot import QtBot
-from qtpy.QtWidgets import QDialog, QPushButton
+from qtpy.QtWidgets import QApplication, QDialog, QMainWindow, QPushButton
 
 from pyoncatqt.login import (
     BackgroundCall,
@@ -453,6 +453,59 @@ def test_close_with_no_active_job_is_noop(qtbot: QtBot) -> None:
     assert w._thread is None
     w.close()
     assert w._thread is None
+
+
+def test_app_shutdown_cleans_up_and_blocks_dialog(qtbot: QtBot) -> None:
+    """A parent window / app shutdown tears down the job and blocks the dialog.
+
+    Closing a parent window delivers no closeEvent to this child widget, so
+    cleanup is driven by the application's ``aboutToQuit`` signal instead. It
+    must cancel the poll loop, close any open verification dialog, and reject a
+    challenge that was already queued before shutdown so the dialog cannot
+    reopen on a widget that is going away.
+    """
+    win = QMainWindow()
+    qtbot.addWidget(win)
+    w = ONCatLogin(key="test")
+    win.setCentralWidget(w)
+
+    mock_agent = MagicMock()
+    mock_agent.has_stored_token.return_value = False
+    w.agent = mock_agent
+
+    started = threading.Event()
+
+    def fake_login(cancel_event: threading.Event) -> None:
+        started.set()
+        cancel_event.wait(timeout=5)
+
+    mock_agent.login.side_effect = fake_login
+
+    w.connect_to_oncat()
+    assert started.wait(timeout=2), "background job did not start"
+
+    # A challenge arrives and opens the verification dialog before shutdown.
+    challenge = MagicMock()
+    challenge.verification_uri = "https://example.com/auth"
+    challenge.verification_uri_complete = None
+    challenge.user_code = "ABCD"
+    w._show_verification(challenge)
+    assert w.login_dialog is not None
+
+    cancel_event = w._cancel_event
+    win.show()
+
+    # Simulate the application shutting down as the host window closes.
+    win.close()
+    QApplication.instance().aboutToQuit.emit()
+
+    assert cancel_event.is_set()
+    assert w.login_dialog is None
+    qtbot.waitUntil(lambda: w._thread is None, timeout=2000)
+
+    # A challenge queued before shutdown must not reopen the dialog.
+    w._show_verification(challenge)
+    assert w.login_dialog is None
 
 
 # ---------------------------------------------------------------------------
