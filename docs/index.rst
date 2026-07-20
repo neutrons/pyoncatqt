@@ -8,10 +8,10 @@ PyONCatQt is a Python package designed to provide a Qt-based GUI for authenticat
 and connection to the ONCat service, a data cataloging and management system developed
 by Oak Ridge National Laboratory. It serves as a plugin for other applications,
 offering a convenient PyQt-based GUI component,
-ONCatLoginDialog, for securely inputting login credentials. Upon successful authentication,
-the package establishes a connection to the ONCat service, granting access to various data
-management functionalities. PyONCatQt aims to streamline the login process and enhance user
-experience when interacting with ONCat within Python applications.
+ONCatLogin, for securely signing in via a browser-based authentication flow. Upon successful
+authentication, the package establishes a connection to the ONCat service, granting access to
+various data management functionalities. PyONCatQt aims to streamline the login process and
+enhance user experience when interacting with ONCat within Python applications.
 
 Getting Started
 ---------------

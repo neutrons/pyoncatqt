@@ -8,7 +8,7 @@ from pyoncatqt.login import ONCatLogin
 class MainWindow(QWidget):
     """Main widget"""
 
-    def __init__(self: QWidget, key: str = "shiver", parent: QWidget = None) -> None:
+    def __init__(self: QWidget, key: str = "client", parent: QWidget = None) -> None:
         super().__init__(parent=parent)
 
         layout = QVBoxLayout()

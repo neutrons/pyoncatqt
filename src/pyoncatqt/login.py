@@ -1,157 +1,178 @@
 import json
 import os
-import sys
-from typing import Any, Dict
+import threading
+from typing import Any, Callable, Dict
 
-import oauthlib
 import pyoncat
-from qtpy.QtCore import QSize, Signal
+import requests
+from qtpy.QtCore import QObject, QThread, Signal, Slot
+from qtpy.QtGui import QCloseEvent
 from qtpy.QtWidgets import (
+    QApplication,
     QDialog,
-    QErrorMessage,
-    QFormLayout,
     QGridLayout,
     QGroupBox,
-    QHBoxLayout,
     QLabel,
-    QLineEdit,
+    QMessageBox,
     QPushButton,
-    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
 
 from pyoncatqt.configuration import get_data
 
+# Scopes requested for the interactive human-user session.
+ONCAT_SCOPES = ["api:read"]
 
-class ONCatLoginDialog(QDialog):
-    """
-    OnCat login dialog for handling authentication.
+# Outcomes of probing the stored session. A genuinely dead/expired token
+# (NEEDS_LOGIN) must be cleared to trigger a fresh authorization; a transient
+# connectivity failure (UNREACHABLE) must leave the token intact so the session
+# survives the outage.
+_SESSION_CONNECTED = "connected"
+_SESSION_NEEDS_LOGIN = "needs_login"
+_SESSION_UNREACHABLE = "unreachable"
 
-    Params
-    ------
-    agent : pyoncat.ONCat, required
-        An instance of pyoncat.ONCat for handling authentication.
-    parent : QWidget, optional
-        The parent widget.
-    username_label : str, optional
-        The label text for the username field. Defaults to "UserId".
-    password_label : str, optional
-        The label text for the password field. Defaults to "Password".
-    login_title : str, optional
-        The title of the login dialog window.
-        Defaults to "Use U/XCAM to connect to OnCat".
-    password_echo : QLineEdit.EchoMode, optional
-        The echo mode for the password field.
-        Defaults to QLineEdit.Password.
+
+class BackgroundCall(QObject):
+    """Runs one callable on a worker thread and reports the outcome.
+
+    PyONCat's device-authorization ``login()`` blocks while it polls the IdP,
+    so it must not run on the GUI thread. This worker is moved onto a
+    :class:`~qtpy.QtCore.QThread`, runs the callable, and reports back through
+    queued signals.
 
     Attributes
     ----------
-    login_status : Signal
-        Signal emitted when the login status changes.
-
-    Methods
-    -------
-    show_message(msg: str) -> None:
-        Show an error dialog with the given message.
-
-    accept() -> None:
-        Accept the login attempt.
+    succeeded : Signal(object)
+        Emitted with the callable's return value on success.
+    failed : Signal(object)
+        Emitted with the raised exception on failure.
+    finished : Signal
+        Emitted once the callable returns, whether or not it succeeded.
     """
 
-    login_status = Signal(bool)
+    succeeded = Signal(object)
+    failed = Signal(object)
+    finished = Signal()
 
-    def __init__(self: QDialog, agent: pyoncat.ONCat = None, parent: QWidget = None, **kwargs: Dict[str, Any]) -> None:
-        super().__init__(parent)
-        username_label_text = kwargs.pop("username_label", "UserId")
-        password_label_text = kwargs.pop("password_label", "Password")
-        window_title_text = kwargs.pop("login_title", "Use U/XCAM to connect to OnCat")
-        pwd_echo = kwargs.pop("password_echo", QLineEdit.Password)
+    def __init__(self: QObject, work: Callable[[], object]) -> None:
+        super().__init__()
+        self._work = work
 
-        self.setWindowTitle(window_title_text)
-
-        username_label = QLabel(username_label_text)
-        self.user_name = QLineEdit(os.getlogin(), self)
-
-        password_label = QLabel(password_label_text)
-        self.user_pwd = QLineEdit(self)
-        self.user_pwd.setEchoMode(pwd_echo)
-
-        self.button_login = QPushButton("&Login")
-        self.button_cancel = QPushButton("Cancel")
-        self.button_login.setEnabled(False)
-
-        self.setMinimumSize(QSize(400, 100))
-        layout = QVBoxLayout()
-        self.setLayout(layout)
-
-        input_layout = QFormLayout()
-        input_layout.addRow(username_label, self.user_name)
-        input_layout.addRow(password_label, self.user_pwd)
-
-        button_layout = QHBoxLayout()
-        button_layout.addWidget(self.button_login)
-        button_layout.addWidget(self.button_cancel)
-
-        layout.addLayout(input_layout)
-        layout.addLayout(button_layout)
-
-        self.user_name.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.user_pwd.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-
-        if agent:
-            self.agent = agent
-        else:
-            self.show_message("No Agent provided for login")
-            return
-
-        # connect signals and slots
-        self.button_login.clicked.connect(self.accept)
-        self.button_cancel.clicked.connect(self.reject)
-        self.user_name.textChanged.connect(self.update_button_status)
-        self.user_pwd.textChanged.connect(self.update_button_status)
-
-        self.user_pwd.setFocus()
-
-        self.error = QErrorMessage(self)
-
-    def show_message(self: QDialog, msg: str) -> None:
-        """Will show a error dialog with the given message"""
-        self.error.showMessage(msg)
-
-    def update_button_status(self: QDialog) -> None:
-        """Update the button status"""
-        self.button_login.setEnabled(bool(self.user_name.text() and self.user_pwd.text()))
-
-    def accept(self: QDialog) -> None:
-        """Accept"""
+    @Slot()
+    def run(self: QObject) -> None:
+        """Run the callable and emit the outcome."""
         try:
-            self.agent.login(
-                self.user_name.text(),
-                self.user_pwd.text(),
-            )
-        except oauthlib.oauth2.rfc6749.errors.InvalidGrantError:
-            self.show_message("Invalid username or password. Please try again.")
-            self.user_pwd.setText("")
-            return
-        except pyoncat.LoginRequiredError:
-            self.show_message("A username and/or password was not provided when logging in.")
-            self.user_pwd.setText("")
-            return
-        except Exception as e:  # noqa: BLE001
-            self.show_message(f"The following exception occured: {e}")
-            self.user_pwd.setText("")
-            return
+            result = self._work()
+        except Exception as error:  # noqa: BLE001
+            self.failed.emit(error)
+        else:
+            self.succeeded.emit(result)
+        finally:
+            self.finished.emit()
 
-        self.login_status.emit(True)
-        # close dialog
-        self.close()
+
+class ChallengeRelay(QObject):
+    """Hops the device-authorization challenge from the worker thread to the GUI.
+
+    PyONCat invokes ``verification_handler`` inline on the worker thread while
+    ``login()`` is mid-poll. This relay is wired as that handler: it emits a
+    queued Qt signal so the dialog is built on the GUI thread, then returns at
+    once so polling resumes.
+
+    Attributes
+    ----------
+    show_verification : Signal(object)
+        Emitted with the :class:`pyoncat.DeviceAuthorizationChallenge`.
+    """
+
+    show_verification = Signal(object)
+
+    def __call__(self: QObject, challenge: "pyoncat.DeviceAuthorizationChallenge") -> None:
+        self.show_verification.emit(challenge)
+
+
+class VerificationDialog(QDialog):
+    """Sign-in dialog showing a clickable link, the user code, and Cancel.
+
+    The user approves the sign-in in a browser using ORNL credentials; this
+    dialog only surfaces the verification link and one-time code produced by
+    the Device Authorization Grant.
+
+    Params
+    ------
+    link : str
+        The verification URL to open in a browser.
+    user_code : str
+        The one-time code to enter at the verification URL, if prompted.
+    parent : QWidget, optional
+        The parent widget.
+
+    Attributes
+    ----------
+    cancelled : Signal
+        Emitted when the user dismisses the dialog before sign-in resolves.
+    """
+
+    cancelled = Signal()
+
+    def __init__(self: QDialog, link: str, user_code: str, parent: QWidget = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Sign in to ONCat")
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Open this link in your browser to approve the sign-in:"))
+        link_label = QLabel(f'<a href="{link}">{link}</a>')
+        link_label.setOpenExternalLinks(True)
+        layout.addWidget(link_label)
+        layout.addWidget(QLabel(f"If asked for a code, enter:  {user_code}"))
+
+        self._resolved = False
+        self.button_cancel = QPushButton("Cancel")
+        self.button_cancel.clicked.connect(self.reject)
+        layout.addWidget(self.button_cancel)
+
+    def resolve(self: QDialog) -> None:
+        """Mark the sign-in resolved so a programmatic close is not a cancel.
+
+        The owner calls this before closing the dialog once sign-in succeeds,
+        so the close does not read as a user cancellation.
+        """
+        self._resolved = True
+
+    def reject(self: QDialog) -> None:
+        """Route the Cancel button and the Escape key to the cancel signal.
+
+        Qt sends both the Cancel button (wired here) and the Escape key
+        through ``reject()``, which dismisses the dialog via ``done()``
+        without firing :meth:`closeEvent`. The cancel signal is emitted here
+        so those paths do not silently leave the worker polling; the guard
+        keeps it from re-emitting after a resolved sign-in or a later close.
+        """
+        if not self._resolved:
+            self._resolved = True
+            self.cancelled.emit()
+        super().reject()
+
+    def closeEvent(self: QDialog, event: QCloseEvent) -> None:
+        """Route the window frame to the cancel signal.
+
+        Dismissing the dialog via the window frame sets the cancel event
+        rather than leaving the worker polling.
+        """
+        if not self._resolved:
+            self._resolved = True
+            self.cancelled.emit()
+        super().closeEvent(event)
 
 
 class ONCatLogin(QGroupBox):
     """
     ONCatLogin widget for connecting to the ONCat service.
-    This widget provides a label and a button to call the login dialog.
+
+    This widget provides a status label and a button that starts an
+    interactive, browser-based sign-in using PyONCat's Device Authorization
+    Grant. When a sign-in is started, a :class:`VerificationDialog` shows a
+    link the user opens to approve the sign-in with ORNL credentials.
 
     Params
     ------
@@ -161,8 +182,11 @@ class ONCatLogin(QGroupBox):
         The key used to retrieve ONCat client ID from configuration. Defaults to None.
     parent : QWidget, optional
         The parent widget.
+    timeout : float, optional
+        Request timeout, in seconds, for the ONCat agent. Defaults to 10.0.
     kwargs : Dict[str, Any], optional
-        Additional keyword arguments.
+        Additional keyword arguments. ``login_title`` overrides the sign-in
+        dialog window title.
 
     Attributes
     ----------
@@ -178,7 +202,7 @@ class ONCatLogin(QGroupBox):
     get_agent_instance() -> pyoncat.ONCat:
         Get the OnCat agent instance.
     connect_to_oncat() -> None:
-        Connect to OnCat.
+        Start an interactive sign-in to OnCat.
     read_token() -> dict:
         Read token from file.
     write_token(token: dict) -> None:
@@ -207,10 +231,15 @@ class ONCatLogin(QGroupBox):
             The key used to retrieve ONCat client ID from configuration. Defaults to None.
         parent : QWidget, optional
             The parent widget.
+        timeout : float, optional
+            Request timeout, in seconds, for the ONCat agent. Defaults to 10.0.
         **kwargs : Dict[str, Any], optional
-            Additional keyword arguments.
+            Additional keyword arguments. ``login_title`` overrides the sign-in
+            dialog window title.
         """
         super().__init__(parent)
+        self._login_title = kwargs.pop("login_title", "Sign in to ONCat")
+
         self.oncat_options_layout = QGridLayout()
         self.setLayout(self.oncat_options_layout)  # Set the layout for the group box
 
@@ -226,9 +255,14 @@ class ONCatLogin(QGroupBox):
         self.oncat_button.clicked.connect(self.connect_to_oncat)
         self.oncat_options_layout.addWidget(self.oncat_button, 4, 1)
 
-        self.error_message_callback = None
+        # Log out of OnCat button
+        self.logout_button = QPushButton("&Log out of ONCat")
+        self.logout_button.setFixedWidth(300)
+        self.logout_button.setToolTip("Log out of ONCat and revoke the current session.")
+        self.logout_button.clicked.connect(self.disconnect_from_oncat)
+        self.oncat_options_layout.addWidget(self.logout_button, 5, 1)
+
         self.timeout = timeout
-        # OnCat agent
 
         self.oncat_url = get_data("login.oncat", "oncat_url")
         if client_id is not None:
@@ -244,28 +278,153 @@ class ONCatLogin(QGroupBox):
             token_filename = f"{key}_token.json"
         self.token_path = os.path.abspath(f"{os.path.expanduser('~')}/.pyoncatqt/{token_filename}")
 
+        # Relay the device-authorization challenge from the worker thread to
+        # the GUI thread, where the verification dialog is built.
+        self._relay = ChallengeRelay()
+        self._relay.show_verification.connect(self._show_verification)
+
         self.agent = pyoncat.ONCat(
             self.oncat_url,
             client_id=self.client_id,
+            flow=pyoncat.DEVICE_AUTHORIZATION_FLOW,
+            scopes=ONCAT_SCOPES,
             # Pass in token getter/setter callbacks here:
             token_getter=self.read_token,
             token_setter=self.write_token,
-            flow=pyoncat.RESOURCE_OWNER_CREDENTIALS_FLOW,
+            # Raise InteractionRequiredError on a dead session instead of
+            # silently re-prompting from inside a data call.
+            reauth_on_expired=pyoncat.REAUTH_INTERACTION_REQUIRED,
+            verification_handler=self._relay,
             timeout=self.timeout,
         )
 
-        self.login_dialog = ONCatLoginDialog(agent=self.agent, parent=self, **kwargs)
+        # Keep the running thread/worker referenced so Qt does not GC them.
+        self._thread: QThread = None
+        self._worker: BackgroundCall = None
+        self.login_dialog: VerificationDialog = None
+        self._cancel_event: threading.Event = None
+        # Latched once teardown begins so queued challenges cannot reopen the
+        # verification dialog after the widget is on its way out.
+        self._closing: bool = False
+
+        # A parent window closing does not deliver a closeEvent to this child
+        # widget, so also tear down when the application is shutting down.
+        app = QApplication.instance()
+        if app is not None:
+            app.aboutToQuit.connect(self._shutdown_background)
+
+        # Cached connection state. Probing ONCat does a blocking network
+        # round trip, so it must never run on the GUI thread;
+        # update_connection_status renders from this cache, which the worker
+        # thread refreshes via _refresh_connection_status and the login/logout
+        # callbacks keep in sync.
+        self._connected: bool = False
+
+        # Render the initial (disconnected) state, then probe in the
+        # background so a still-valid stored session is reflected without
+        # blocking the GUI thread during construction.
         self.update_connection_status()
+        self._refresh_connection_status()
 
     def update_connection_status(self: QGroupBox) -> None:
-        """Update connection status"""
-        if self.is_connected:
+        """Render the cached connection status.
+
+        Reads the cached connection state instead of probing ONCat, so it
+        never does network I/O on the GUI thread. The cache is refreshed by
+        :meth:`_refresh_connection_status` and by the login/logout callbacks.
+        """
+        connected = self._connected
+        if connected:
             self.status_label.setText("ONCat: Connected")
             self.status_label.setStyleSheet("color: green")
         else:
             self.status_label.setText("ONCat: Disconnected")
             self.status_label.setStyleSheet("color: red")
-        self.connection_updated.emit(self.is_connected)
+        # Only allow connecting while disconnected and logging out while
+        # there is a live session to act on.
+        self.oncat_button.setEnabled(not connected)
+        self.logout_button.setEnabled(connected or self.agent.has_stored_token())
+        self.connection_updated.emit(connected)
+
+    def _refresh_connection_status(self: QGroupBox) -> None:
+        """Probe ONCat on a worker thread and refresh the cached status.
+
+        :attr:`is_connected` does a blocking network round trip, so it is run
+        through the worker infrastructure rather than on the GUI thread.
+        Without a stored token there is nothing to probe, so the cache is
+        cleared without spawning a thread; likewise, no probe is started while
+        another job (sign-in or logout) is already running.
+        """
+        if not self.agent.has_stored_token():
+            self._connected = False
+            self.update_connection_status()
+            return
+        if self._thread is not None:
+            return
+        # Surface a "checking" state and disable both actions while the probe
+        # is in flight; _on_probe_done/_on_probe_error restore the label and
+        # enabled state via update_connection_status.
+        self.oncat_button.setEnabled(False)
+        self.logout_button.setEnabled(False)
+        self.status_label.setText("ONCat: Checking session...")
+        self._run_in_background(
+            lambda: self.is_connected,
+            self._on_probe_done,
+            self._on_probe_error,
+        )
+
+    def _on_probe_done(self: QGroupBox, connected: object) -> None:
+        """Cache the worker's probe result and refresh the status."""
+        self._connected = bool(connected)
+        self.update_connection_status()
+
+    def _on_probe_error(self: QGroupBox, _: BaseException) -> None:
+        """Treat a failed probe as disconnected and refresh the status."""
+        self._connected = False
+        self.update_connection_status()
+
+    def _probe_session(self: QGroupBox) -> str:
+        """Probe the stored session and classify the outcome.
+
+        Distinguishes a genuinely invalid or expired token -- which must be
+        cleared to trigger a fresh authorization -- from a transient
+        connectivity failure, during which the token is preserved so the
+        session survives the outage rather than forcing a needless re-login.
+
+        Returns
+        -------
+        str
+            One of :data:`_SESSION_CONNECTED`, :data:`_SESSION_NEEDS_LOGIN`, or
+            :data:`_SESSION_UNREACHABLE`.
+        """
+        # Without a stored token there is no session to probe, and calling a
+        # data method would drive login() into a blocking, interactive Device
+        # Authorization Grant on the GUI thread. Report "needs login" without
+        # any network round trip.
+        if not self.agent.has_stored_token():
+            return _SESSION_NEEDS_LOGIN
+
+        try:
+            self.agent.Facility.list()
+            return _SESSION_CONNECTED
+        except (
+            pyoncat.InvalidRefreshTokenError,
+            pyoncat.InteractionRequiredError,
+            pyoncat.LoginRequiredError,
+        ):
+            # The token is dead or a fresh interactive sign-in is required.
+            return _SESSION_NEEDS_LOGIN
+        except (
+            pyoncat.DeviceAuthorizationNetworkError,
+            requests.exceptions.RequestException,
+        ):
+            # A transport-layer failure (timeout, DNS, connection refused) is
+            # not evidence the token is dead, so keep it and report the outage.
+            return _SESSION_UNREACHABLE
+        except Exception:  # noqa BLE001
+            # An unclassified failure is likewise no proof the token is dead;
+            # err on the side of preserving it.
+            return _SESSION_UNREACHABLE
 
     @property
     def is_connected(self: QGroupBox) -> bool:
@@ -277,16 +436,7 @@ class ONCatLogin(QGroupBox):
         bool
             True if connected, False otherwise.
         """
-
-        try:
-            self.agent.Facility.list()
-            return True
-        except pyoncat.InvalidRefreshTokenError:
-            return False
-        except pyoncat.LoginRequiredError:
-            return False
-        except Exception:  # noqa BLE001
-            return False
+        return self._probe_session() == _SESSION_CONNECTED
 
     def get_agent_instance(self: QGroupBox) -> pyoncat.ONCat:
         """
@@ -300,11 +450,235 @@ class ONCatLogin(QGroupBox):
         return self.agent
 
     def connect_to_oncat(self: QGroupBox) -> None:
-        """Connect to OnCat"""
+        """Start an interactive, browser-based sign-in to OnCat.
 
-        self.login_dialog.exec_()
+        Sign-in runs on a worker thread while PyONCat polls the IdP; a
+        :class:`VerificationDialog` surfaces the approval link. The connection
+        status is refreshed once sign-in resolves.
+        """
+        # Ignore repeat clicks while a sign-in is already in progress.
+        if self._thread is not None:
+            return
+
+        status = self._probe_session()
+
+        # A still-valid stored session needs no interactive sign-in.
+        if status == _SESSION_CONNECTED:
+            self._connected = True
+            self.update_connection_status()
+            return
+
+        # A transient connectivity failure is not evidence the stored session
+        # is dead. Preserve the token -- clearing it would force a needless
+        # re-authorization once the outage clears -- and surface the failure
+        # instead of starting an interactive sign-in on a blip.
+        if status == _SESSION_UNREACHABLE:
+            self.update_connection_status()
+            QMessageBox.warning(
+                self,
+                "ONCat",
+                "Could not reach ONCat to verify the session. Your sign-in has "
+                "been kept; please check your connection and try again.",
+            )
+            return
+
+        # Otherwise the token is genuinely invalid or expired: discard it
+        # first. The Device Authorization Grant's login() returns immediately
+        # when a token is already stored -- even an expired one -- so without
+        # this the browser challenge would never appear and the click would
+        # seem to do nothing.
+        self._clear_stored_token()
+
+        self.oncat_button.setEnabled(False)
+        self.status_label.setText("ONCat: Starting sign-in...")
+        self._cancel_event = threading.Event()
+        self._run_in_background(
+            lambda: self.agent.login(cancel_event=self._cancel_event),
+            self._on_sign_in_ok,
+            self._on_sign_in_error,
+        )
+
+    def disconnect_from_oncat(self: QGroupBox) -> None:
+        """Log out of OnCat, revoking the current session.
+
+        ``logout()`` revokes the refresh token server-side rather than only
+        clearing it locally, so it does network I/O and must run on a worker
+        thread. The connection status is refreshed once it resolves.
+        """
+        # Ignore repeat clicks while another job is already in progress.
+        if self._thread is not None:
+            return
+
+        self.logout_button.setEnabled(False)
+        self.oncat_button.setEnabled(False)
+        self.status_label.setText("ONCat: Logging out...")
+        self._run_in_background(
+            self.agent.logout,
+            self._on_logout_ok,
+            self._on_logout_error,
+        )
+
+    def _on_logout_ok(self: QGroupBox, _: object) -> None:
+        """Finish a successful logout and refresh the connection status."""
+        self._clear_stored_token()
+        self._connected = False
         self.update_connection_status()
-        # self.parent.update_boxes()
+
+    def _on_logout_error(self: QGroupBox, error: BaseException) -> None:
+        """Report a failed server-side logout and refresh the status.
+
+        The local token is cleared regardless, so this session is unusable
+        here; surface the server-side revocation failure rather than claim a
+        clean logout.
+        """
+        self._clear_stored_token()
+        self._connected = False
+        QMessageBox.warning(
+            self,
+            "ONCat",
+            f"Logged out on this device, but ONCat could not revoke the session server-side:\n{error}",
+        )
+        self.update_connection_status()
+
+    def _run_in_background(
+        self: QGroupBox,
+        work: Callable[[], object],
+        on_success: Callable[[object], None],
+        on_error: Callable[[BaseException], None],
+    ) -> None:
+        """Run ``work`` on a worker thread, routing the outcome to callbacks."""
+        self._thread = QThread()
+        self._worker = BackgroundCall(work)
+        self._worker.moveToThread(self._thread)
+        self._thread.started.connect(self._worker.run)
+        self._worker.succeeded.connect(on_success)
+        self._worker.failed.connect(on_error)
+        # Drop the references only after the thread has fully stopped, so
+        # nothing is collected mid-run.
+        self._worker.finished.connect(self._thread.quit)
+        self._worker.finished.connect(self._worker.deleteLater)
+        self._thread.finished.connect(self._thread.deleteLater)
+        self._thread.finished.connect(self._clear_job)
+        self._thread.start()
+
+    def _clear_job(self: QGroupBox) -> None:
+        self._thread = None
+        self._worker = None
+
+    def closeEvent(self: QGroupBox, event: QCloseEvent) -> None:
+        """Stop any in-flight background job before the widget is torn down.
+
+        The worker thread is unparented and its ``succeeded``/``failed``
+        signals are wired to bound methods on this widget. If the widget were
+        destroyed mid-job, a late-finishing worker could call back into a
+        half-destroyed C++ object. Cancel the poll loop where possible, detach
+        the outcome callbacks so nothing outlives the widget, then stop and
+        wait for the thread.
+        """
+        self._shutdown_background()
+        super().closeEvent(event)
+
+    def _shutdown_background(self: QGroupBox) -> None:
+        """Cancel, detach, and join any running background job.
+
+        Complements the normal :meth:`_clear_job` teardown path, which handles
+        jobs that finish on their own; this handles the case where the widget
+        (or its host window/application) shuts down while a job is still
+        running. Idempotent: safe to invoke from both :meth:`closeEvent` and
+        the application's ``aboutToQuit`` signal.
+        """
+        if self._closing:
+            return
+        # Latch first so a challenge already queued on the GUI thread cannot
+        # rebuild the verification dialog once teardown has begun.
+        self._closing = True
+        # Stop routing any further (or in-flight queued) challenges to the GUI.
+        try:
+            self._relay.show_verification.disconnect(self._show_verification)
+        except (RuntimeError, TypeError):
+            pass
+        # Close any dialog currently awaiting browser approval; resolve() keeps
+        # this teardown close from being read as a user cancellation.
+        self._close_dialog()
+
+        thread = self._thread
+        if thread is None:
+            return
+        # Unblock a sign-in poll loop; logout/probe have no cancel hook and
+        # simply run to completion (bounded by the agent request timeout).
+        if self._cancel_event is not None:
+            self._cancel_event.set()
+        # Detach the outcome callbacks so a late-finishing job cannot call back
+        # into a widget that is being destroyed. The finished chain (quit /
+        # deleteLater / _clear_job) is left intact so the thread still cleans
+        # itself up.
+        worker = self._worker
+        if worker is not None:
+            try:
+                worker.succeeded.disconnect()
+                worker.failed.disconnect()
+            except (RuntimeError, TypeError):
+                pass
+        # Stop the event loop and block until the worker has returned.
+        thread.quit()
+        thread.wait()
+
+    @Slot(object)
+    def _show_verification(self: QGroupBox, challenge: "pyoncat.DeviceAuthorizationChallenge") -> None:
+        """Build and show the verification dialog on the GUI thread.
+
+        A challenge may still be sitting queued on the GUI thread when teardown
+        begins; reject it once closing so a dialog is never reopened on a widget
+        that is going away.
+        """
+        if self._closing:
+            return
+        self.status_label.setText("ONCat: Waiting for browser approval...")
+        link = challenge.verification_uri_complete or challenge.verification_uri
+        self.login_dialog = VerificationDialog(link, challenge.user_code, parent=self)
+        self.login_dialog.setWindowTitle(self._login_title)
+        self.login_dialog.cancelled.connect(self._on_cancel_requested)
+        self.login_dialog.show()
+
+    @Slot()
+    def _on_cancel_requested(self: QGroupBox) -> None:
+        """Signal the worker to abort the poll loop."""
+        if self._cancel_event is not None:
+            self._cancel_event.set()
+        self.status_label.setText("ONCat: Cancelling sign-in...")
+
+    def _on_sign_in_ok(self: QGroupBox, _: object) -> None:
+        """Finish a successful sign-in and refresh the connection status."""
+        self._close_dialog()
+        self._cancel_event = None
+        self._connected = True
+        self.update_connection_status()
+
+    def _on_sign_in_error(self: QGroupBox, error: BaseException) -> None:
+        """Report a failed or cancelled sign-in and refresh the status."""
+        self._close_dialog()
+        self._cancel_event = None
+        self._connected = False
+        if not isinstance(error, pyoncat.DeviceAuthorizationCancelled):
+            QMessageBox.warning(self, "ONCat", str(error))
+        self.update_connection_status()
+
+    def _close_dialog(self: QGroupBox) -> None:
+        """Close the verification dialog without treating it as a cancel."""
+        if self.login_dialog is not None:
+            self.login_dialog.resolve()
+            self.login_dialog.close()
+            self.login_dialog = None
+
+    def _clear_stored_token(self: QGroupBox) -> None:
+        """Remove any persisted token so the next login() re-prompts.
+
+        The Device Authorization Grant's login() returns immediately when a
+        token is already stored, even if it is expired, so a stale token has
+        to be cleared for the browser challenge to appear.
+        """
+        if os.path.exists(self.token_path):
+            os.remove(self.token_path)
 
     def read_token(self: QGroupBox) -> dict:
         """

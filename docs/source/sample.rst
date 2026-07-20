@@ -10,8 +10,14 @@ This example creates a main window with an ONCatLogin widget and two QListWidget
 the instrument lists for the SNS and HFIR facilities. The instrument lists are updated when
 the connection status changes.
 The only required argument for the ``ONCatLogin`` widget is the client ID. The client ID is a unique identifier
-for the application that is used to authenticate with the ONCat server. The client ID is provided by the ONCat support team.
+for the application that is used to authenticate with the ONCat server. The client ID is provided by the ONCat support team
 and should exist in pyoncatqt configuration file.
+
+Authentication uses a browser-based sign-in (the OAuth Device Authorization Grant). When the user clicks the
+login button, the widget starts an interactive sign-in on a worker thread and shows a small dialog with a link.
+The user opens that link in a browser and approves the sign-in with their ORNL credentials. No username or
+password is entered inside the application. Once the sign-in resolves, the widget refreshes its connection
+status and emits ``connection_updated``.
 
 .. code:: python
 
@@ -27,7 +33,7 @@ and should exist in pyoncatqt configuration file.
         layout = QVBoxLayout()
 
         # Create and add the Oncat widget
-        self.oncat_widget = ONCatLogin(key="", parent=self)
+        self.oncat_widget = ONCatLogin(key="client", parent=self)
         self.oncat_widget.connection_updated.connect(self.update_instrument_lists)
         layout.addWidget(self.oncat_widget)
 
@@ -66,89 +72,65 @@ and should exist in pyoncatqt configuration file.
         sys.exit(app.exec_())
 
 
-ONCatLoginDialog
-----------------
+Configuration: ``key`` and ``client_id``
+-----------------------------------------
 
-The `ONCatLoginDialog` can be imported and used separate from the `ONCatLogin` widget to give developers
-the ability to customize the login process. In order to use the `ONCatLoginDialog`, you must have an
-instance of the `pyoncat.ONCat` agent.
+The ``ONCatLogin`` widget creates and owns its ``pyoncat.ONCat`` agent for you, so you do not
+need to build one yourself. It accepts either a ``key`` or a ``client_id``:
 
-If you chose to use the `ONCatLogin` widget instead, the agent is already created for you.
-In this case, a `key` or `client_id` are required to be passed by the user application. If `key` (application name)
-is passed, the client_id is retrieved from the configuration, provided it exists. If the client_id is
-provided, it uses this instead. If both are provided, client_id is used for oncat client id tasks, e.g. agent creation,
-and the key is only used to create a human-readbale filename for saving the user's authentication token.
+- If ``key`` (an application name) is passed, the client ID is looked up from the pyoncatqt
+  configuration file, provided an entry exists for it.
+- If ``client_id`` is passed, it is used directly.
+- If both are passed, ``client_id`` configures the agent while ``key`` still names the token file.
 
-The `ONCatLoginDialog` requires the agent to be passed in as an argument.
-The agent is used to authenticate the user and manage the connection to the ONCat server.
-At a minimum the agent must be initialized with the ONCat server URL, flow, and the client ID.
-Additional callbacks can be passed in to handle token storage and retrieval. These would be simple functions to read and write
-the token to a JSON file.
+Without ``key``, the token filename uses the client-ID prefix; with ``key``, it uses the key.
+The token is stored under ``~/.pyoncatqt/``.
+
+Browser-Based Sign-In (Device Authorization Grant)
+--------------------------------------------------
+
+The widget authenticates using the OAuth Device Authorization Grant. There is no username or
+password field: the user approves the sign-in in a browser instead. The widget builds its agent
+with ``flow=pyoncat.DEVICE_AUTHORIZATION_FLOW`` and wires the token storage callbacks, roughly
+as follows:
 
 .. code:: python
 
     import pyoncat
 
-    # This is a temporary "client ID" intended for use in this tutorial **only**.
-    # For your own work, please contact ONCat Support to be issued your own credentials.
-    CLIENT_ID = "c0686270-e983-4c71-bd0e-bfa47243a47f"
+    ONCAT_URL = "https://oncat.ornl.gov"
 
-    # We will use the testing version of ONCat for this sample.
-    ONCAT_URL = "https://oncat-testing.ornl.gov"
-
-    oncat = pyoncat.ONCat(
+    agent = pyoncat.ONCat(
         ONCAT_URL,
         client_id=CLIENT_ID,
-        flow=pyoncat.RESOURCE_OWNER_CREDENTIALS_FLOW,
+        flow=pyoncat.DEVICE_AUTHORIZATION_FLOW,
+        scopes=["api:read"],
+        token_getter=read_token,
+        token_setter=write_token,
+        # Raise InteractionRequiredError on a dead session instead of
+        # silently re-prompting from inside a data call.
+        reauth_on_expired=pyoncat.REAUTH_INTERACTION_REQUIRED,
+        verification_handler=verification_handler,
     )
 
-The following example demonstrates how to use the `ONCatLoginDialog` in a PyQt application.
+When the login button is clicked, the widget:
 
-- The application consists of a single button labeled "Login to ONCat".
-- When the button is clicked, it triggers the opening of the `ONCatLoginDialog`,
-  allowing the user to input their ONCat login credentials securely.
-- Upon successful login, the dialog closes, and the application can proceed with its functionality,
-  utilizing the authenticated ONCat connection for data management tasks.
+1. Checks for an existing, valid stored session. If one is present, it simply refreshes the
+   connection status and does nothing further.
+2. Otherwise clears any stale token and starts ``agent.login()`` on a worker thread. Because
+   ``login()`` blocks while it polls the identity provider, it must not run on the GUI thread.
+3. Receives the device-authorization challenge (verification link and one-time code) from
+   PyONCat via the ``verification_handler`` and shows a small dialog with a clickable link.
+   The user opens the link in a browser and approves the sign-in with their ORNL credentials.
+4. On success, closes the dialog, refreshes the connection status, and emits
+   ``connection_updated``. If the user cancels, the poll loop is aborted cleanly.
+
+Customizing the sign-in dialog title
+-------------------------------------
+
+Pass ``login_title`` to override the title of the sign-in dialog window (it defaults to
+``"Sign in to ONCat"``):
 
 .. code:: python
 
-    from pyoncatqt.login import ONCatLoginDialog
-    import pyoncat
-    from qtpy.QtWidgets import QApplication, QPushButton, QVBoxLayout, QWidget
-    import sys
-
-    class MainWindow(QWidget):
-        def __init__(self):
-            super().__init__()
-            self.initUI()
-
-        def initUI(self):
-            layout = QVBoxLayout()
-
-            # Create a button to open the ONCat login dialog
-            self.login_button = QPushButton("Login to ONCat")
-            self.login_button.clicked.connect(self.open_oncat_login_dialog)
-            layout.addWidget(self.login_button)
-            self.setLayout(layout)
-            self.setWindowTitle("ONCat Login Example")
-
-            # Create an instance of the pyoncat agent pyoncat.ONCat
-            CLIENT_ID = "c0686270-e983-4c71-bd0e-bfa47243a47f"
-
-            ONCAT_URL = "https://oncat-testing.ornl.gov"
-
-            self.agent = pyoncat.ONCat(
-                ONCAT_URL,
-                client_id=CLIENT_ID,
-                flow=pyoncat.RESOURCE_OWNER_CREDENTIALS_FLOW,
-            )
-
-        def open_oncat_login_dialog(self):
-            dialog = ONCatLoginDialog(agent=self.agent, parent=self)
-            dialog.exec_()
-
-    if __name__ == "__main__":
-        app = QApplication(sys.argv)
-        window = MainWindow()
-        window.show()
-        sys.exit(app.exec_())
+    self.oncat_widget = ONCatLogin(key="client", login_title="Connect to ONCat", parent=self)

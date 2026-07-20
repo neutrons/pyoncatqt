@@ -1,258 +1,574 @@
-import functools
 import json
 import os
+import threading
+from pathlib import Path
+from typing import NoReturn
 from unittest.mock import MagicMock, patch
 
-import oauthlib
 import pyoncat
 import pytest
-from qtpy import QtCore
-from qtpy.QtWidgets import QApplication, QDialog, QLineEdit, QPushButton
+import requests
+from pytestqt.qtbot import QtBot
+from qtpy.QtWidgets import QApplication, QDialog, QMainWindow, QPushButton
 
-from pyoncatqt.configuration import get_data
-from pyoncatqt.login import ONCatLogin, ONCatLoginDialog
+from pyoncatqt.login import (
+    BackgroundCall,
+    ChallengeRelay,
+    ONCatLogin,
+    VerificationDialog,
+)
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 
-def check_status(login_status: bool) -> None:
-    assert login_status
+def _make_widget(qtbot: QtBot) -> ONCatLogin:
+    w = ONCatLogin(key="test")
+    qtbot.addWidget(w)
+    return w
 
 
-def test_login_dialog_creation() -> None:
-    application = QApplication([])
-    dialog = ONCatLoginDialog(application)
+# ---------------------------------------------------------------------------
+# BackgroundCall
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.usefixtures("qtbot")
+def test_background_call_success() -> None:
+    results, errors, finished = [], [], []
+    worker = BackgroundCall(lambda: 42)
+    worker.succeeded.connect(results.append)
+    worker.failed.connect(errors.append)
+    worker.finished.connect(lambda: finished.append(True))
+    worker.run()
+    assert results == [42]
+    assert errors == []
+    assert finished == [True]
+
+
+@pytest.mark.usefixtures("qtbot")
+def test_background_call_failure() -> None:
+    err = RuntimeError("boom")
+
+    def bad() -> NoReturn:
+        raise err
+
+    worker = BackgroundCall(bad)
+    errors, finished = [], []
+    worker.failed.connect(errors.append)
+    worker.finished.connect(lambda: finished.append(True))
+    worker.run()
+    assert errors == [err]
+    assert finished == [True]
+
+
+# ---------------------------------------------------------------------------
+# ChallengeRelay
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.usefixtures("qtbot")
+def test_challenge_relay_emits_signal() -> None:
+    relay = ChallengeRelay()
+    challenge = MagicMock()
+    received = []
+    relay.show_verification.connect(received.append)
+    relay(challenge)
+    assert received == [challenge]
+
+
+# ---------------------------------------------------------------------------
+# VerificationDialog
+# ---------------------------------------------------------------------------
+
+
+def test_verification_dialog_creation(qtbot: QtBot) -> None:
+    dialog = VerificationDialog("https://example.com/auth?code=ABCD", "ABCD-1234")
+    qtbot.addWidget(dialog)
     assert isinstance(dialog, QDialog)
-    assert dialog.windowTitle() == "Use U/XCAM to connect to OnCat"
-    assert isinstance(dialog.user_name, QLineEdit)
-    assert dialog.user_name.text() == os.getlogin()
-    assert isinstance(dialog.user_pwd, QLineEdit)
-    assert dialog.user_pwd.echoMode() == QLineEdit.Password
-    assert isinstance(dialog.button_login, QPushButton)
+    assert dialog.windowTitle() == "Sign in to ONCat"
     assert isinstance(dialog.button_cancel, QPushButton)
 
 
-def test_login_key(qtbot: pytest.fixture) -> None:
-    dialog = ONCatLogin(key="test")
-    dialog.login_dialog = ONCatLoginDialog(agent=MagicMock(), parent=dialog)
-    dialog.login_dialog.login_status.connect(check_status)
+def test_verification_dialog_cancel_emits_signal(qtbot: QtBot) -> None:
+    dialog = VerificationDialog("https://example.com", "XYZW")
     qtbot.addWidget(dialog)
-    dialog.show()
-
-    assert dialog.client_id == "0123456489"
-    assert dialog.token_path.endswith("test_token.json")
-
-    completed = False
-
-    def handle_dialog() -> None:
-        nonlocal completed
-
-        qtbot.keyClicks(dialog.login_dialog.user_pwd, "password")
-        qtbot.wait(2000)
-        qtbot.mouseClick(dialog.login_dialog.button_login, QtCore.Qt.LeftButton)
-        completed = True
-
-    def dialog_completed() -> None:
-        nonlocal completed
-        assert completed is True
-
-    QtCore.QTimer.singleShot(500, functools.partial(handle_dialog))
-    qtbot.mouseClick(dialog.oncat_button, QtCore.Qt.LeftButton)
-
-    qtbot.waitUntil(dialog_completed, timeout=5000)
+    with qtbot.waitSignal(dialog.cancelled, timeout=1000):
+        dialog.close()
 
 
-def test_login_client_id(qtbot: pytest.fixture) -> None:
-    client_id = "12cnfjejsfsdf3456789ab"
-    dialog = ONCatLogin(client_id=client_id)
-    dialog.login_dialog = ONCatLoginDialog(agent=MagicMock(), parent=dialog)
-    dialog.login_dialog.login_status.connect(check_status)
+def test_verification_dialog_reject_emits_signal(qtbot: QtBot) -> None:
+    """The Cancel button / Escape path (reject) emits cancelled exactly once.
+
+    reject() dismisses the dialog via done() without firing closeEvent, so
+    it must raise the cancel signal itself, and only once.
+    """
+    dialog = VerificationDialog("https://example.com", "XYZW")
     qtbot.addWidget(dialog)
+    emitted = []
+    dialog.cancelled.connect(lambda: emitted.append(True))
+    with qtbot.waitSignal(dialog.cancelled, timeout=1000):
+        dialog.reject()
+    # A subsequent close must not re-emit the cancel signal.
+    dialog.close()
+    qtbot.wait(100)
+    assert emitted == [True]
+
+
+def test_verification_dialog_escape_cancels_and_stops_polling(qtbot: QtBot) -> None:
+    """Pressing Escape cancels the sign-in and signals the poll loop to stop.
+
+    Escape routes through Qt's default reject(); the widget wires the
+    dialog's cancelled signal to setting the worker's cancel_event, so the
+    background poll loop is unblocked.
+    """
+    from qtpy.QtCore import Qt
+
+    w = _make_widget(qtbot)
+    w._cancel_event = threading.Event()
+
+    challenge = MagicMock()
+    challenge.verification_uri = "https://example.com/auth"
+    challenge.verification_uri_complete = None
+    challenge.user_code = "ABCD"
+    w._show_verification(challenge)
+    dialog = w.login_dialog
+    assert dialog is not None
+
     dialog.show()
+    qtbot.waitExposed(dialog)
+    with qtbot.waitSignal(dialog.cancelled, timeout=1000):
+        qtbot.keyClick(dialog, Qt.Key_Escape)
 
-    assert dialog.client_id == client_id
-    # token_12cnf.json
-    assert dialog.token_path.endswith(f"{client_id[0:8]}_token.json")
-    completed = False
+    assert w._cancel_event.is_set()
+    assert "Cancelling" in w.status_label.text()
 
-    def handle_dialog() -> None:
-        nonlocal completed
-
-        qtbot.keyClicks(dialog.login_dialog.user_pwd, "password")
-        qtbot.wait(2000)
-        qtbot.mouseClick(dialog.login_dialog.button_login, QtCore.Qt.LeftButton)
-        completed = True
-
-    def dialog_completed() -> None:
-        nonlocal completed
-        assert completed is True
-
-    QtCore.QTimer.singleShot(500, functools.partial(handle_dialog))
-    qtbot.mouseClick(dialog.oncat_button, QtCore.Qt.LeftButton)
-
-    qtbot.waitUntil(dialog_completed, timeout=5000)
+    dialog.resolve()
+    dialog.close()
+    w.login_dialog = None
+    QApplication.instance().processEvents()
 
 
-def test_login_client_id_key(qtbot: pytest.fixture) -> None:
-    client_id = "12cnfjejsfsdf3456789ab"
-    key = "test"
-
-    dialog = ONCatLogin(client_id=client_id, key=key)
-    dialog.login_dialog = ONCatLoginDialog(agent=MagicMock(), parent=dialog)
-    dialog.login_dialog.login_status.connect(check_status)
+def test_verification_dialog_resolve_suppresses_cancel(qtbot: QtBot) -> None:
+    dialog = VerificationDialog("https://example.com", "XYZW")
     qtbot.addWidget(dialog)
-    dialog.show()
-
-    # client id provided as parameter
-    assert dialog.client_id == client_id
-    # key used for filename only token_shiver.json
-    assert dialog.token_path.endswith(f"{key}_token.json")
-    completed = False
-
-    def handle_dialog() -> None:
-        nonlocal completed
-
-        qtbot.keyClicks(dialog.login_dialog.user_pwd, "password")
-        qtbot.wait(2000)
-        qtbot.mouseClick(dialog.login_dialog.button_login, QtCore.Qt.LeftButton)
-        completed = True
-
-    def dialog_completed() -> None:
-        nonlocal completed
-        assert completed is True
-
-    QtCore.QTimer.singleShot(500, functools.partial(handle_dialog))
-    qtbot.mouseClick(dialog.oncat_button, QtCore.Qt.LeftButton)
-
-    qtbot.waitUntil(dialog_completed, timeout=5000)
+    emitted = []
+    dialog.cancelled.connect(lambda: emitted.append(True))
+    dialog.resolve()
+    dialog.close()
+    qtbot.wait(100)
+    assert emitted == []
 
 
-def test_get_agent() -> None:
-    dialog = ONCatLogin(key="test")
-    dialog.agent = MagicMock()
-    assert dialog.get_agent_instance() == dialog.agent
+# ---------------------------------------------------------------------------
+# ONCatLogin constructor
+# ---------------------------------------------------------------------------
 
 
-def test_is_connected() -> None:
-    dialog = ONCatLogin(key="test")
-    mock_agent = MagicMock()
-    dialog.agent = mock_agent
-    mock_agent.Instrument.list.return_value = [{"name": "Instrument1"}, {"name": "Instrument2"}]
-    dialog.login_dialog = MagicMock()
-
-    assert dialog.is_connected
-    dialog.connect_to_oncat()
-    # dialog is always called
-    assert dialog.login_dialog.exec_.called
-
-
-def test_login_dialog_nominal(qtbot: pytest.fixture) -> None:
-    agent = MagicMock()
-    dialog = ONCatLoginDialog(agent=agent)
-    dialog.login_status.connect(check_status)
-    qtbot.addWidget(dialog)
-    dialog.show()
-    qtbot.keyClicks(dialog.user_pwd, "password")
-    qtbot.wait(2000)
-    assert dialog.user_pwd.text() == "password"
-    qtbot.mouseClick(dialog.button_login, QtCore.Qt.LeftButton)
-    agent.login.assert_called_once_with(os.getlogin(), "password")
-
-
-def test_login_dialog_timeout(qtbot: pytest.fixture) -> None:
-    import socket
-
-    mock_agent = MagicMock(spec=pyoncat.ONCat)
-    mock_agent.login.side_effect = socket.timeout
-    dialog = ONCatLoginDialog(agent=mock_agent)
-    mock_agent.timeout = 0.0000001
-    dialog.show_message = MagicMock()
-    qtbot.addWidget(dialog)
-    dialog.show()
-    qtbot.keyClicks(dialog.user_pwd, "password")
-    qtbot.wait(2000)
-    assert dialog.user_pwd.text() == "password"
-    qtbot.mouseClick(dialog.button_login, QtCore.Qt.LeftButton)
-    mock_agent.login.assert_called_once_with(os.getlogin(), "password")
-    dialog.show_message.assert_called_once_with("The following exception occured: ")
-
-
-def test_login_dialog_not_timeout(qtbot: pytest.fixture) -> None:
-    import socket
-
-    mock_agent = MagicMock(spec=pyoncat.ONCat)
-    mock_agent.login.side_effect = socket.timeout
-    dialog = ONCatLoginDialog(agent=mock_agent)
-    mock_agent.timeout = 10.0
-    dialog.show_message = MagicMock()
-    qtbot.addWidget(dialog)
-    dialog.show()
-    qtbot.keyClicks(dialog.user_pwd, "password")
-    qtbot.wait(2000)
-    assert dialog.user_pwd.text() == "password"
-    qtbot.mouseClick(dialog.button_login, QtCore.Qt.LeftButton)
-    mock_agent.call_count == 0
-
-
-def test_login_dialog_no_password(qtbot: pytest.fixture) -> None:
-    mock_agent = MagicMock(spec=pyoncat.ONCat)
-    mock_agent.login.side_effect = pyoncat.LoginRequiredError
-    dialog = ONCatLoginDialog(agent=mock_agent)
-    dialog.show_message = MagicMock()
-    qtbot.addWidget(dialog)
-    dialog.show()
-    qtbot.wait(2000)
-    assert dialog.user_pwd.text() == ""
-    assert dialog.button_login.isEnabled() is False
-    qtbot.mouseClick(dialog.button_login, QtCore.Qt.LeftButton)
-    mock_agent.call_count == 0
-    assert dialog.show_message.call_count == 0
-
-
-def test_login_dialog_bad_password(qtbot: pytest.fixture) -> None:
-    mock_agent = MagicMock(spec=pyoncat.ONCat)
-    mock_agent.login.side_effect = oauthlib.oauth2.rfc6749.errors.InvalidGrantError
-    dialog = ONCatLoginDialog(agent=mock_agent)
-    dialog.show_message = MagicMock()
-    qtbot.addWidget(dialog)
-    dialog.show()
-    qtbot.keyClicks(dialog.user_pwd, "bad_password")
-    qtbot.wait(2000)
-    assert dialog.user_pwd.text() == "bad_password"
-    qtbot.mouseClick(dialog.button_login, QtCore.Qt.LeftButton)
-    mock_agent.login.assert_called_once_with(os.getlogin(), "bad_password")
-    dialog.show_message.assert_called_once_with("Invalid username or password. Please try again.")
-
-
-def test_login_dialog_other_exceptions(qtbot: pytest.fixture) -> None:
-    import urllib3
-
-    mock_agent = MagicMock(spec=pyoncat.ONCat)
-    mock_agent.login.side_effect = urllib3.exceptions.NameResolutionError
-    dialog = ONCatLoginDialog(agent=mock_agent)
-    dialog.show_message = MagicMock()
-    qtbot.addWidget(dialog)
-    dialog.show()
-    qtbot.keyClicks(dialog.user_pwd, "bad_password")
-    qtbot.wait(2000)
-    assert dialog.user_pwd.text() == "bad_password"
-    qtbot.mouseClick(dialog.button_login, QtCore.Qt.LeftButton)
-    mock_agent.login.assert_called_once_with(os.getlogin(), "bad_password")
-    # This is the error message that crashed Shiver when there is no internet connection
-    dialog.show_message.assert_called_once_with(
-        "The following exception occured: NameResolutionError.__init__() missing \
-3 required positional arguments: 'host', 'conn', and 'reason'"
-    )
-
-
-def test_login_dialog_no_agent(qtbot: pytest.fixture) -> None:
-    with patch("pyoncatqt.login.ONCatLoginDialog.show_message"):
-        dialog = ONCatLoginDialog()
-        qtbot.addWidget(dialog)
-        dialog.show_message.assert_called_once_with("No Agent provided for login")
-
-
-def test_read_token(qtbot: pytest.fixture, token_path: pytest.fixture) -> None:
+def test_login_key(qtbot: QtBot) -> None:
     widget = ONCatLogin(key="test")
     qtbot.addWidget(widget)
+    assert widget.client_id == "0123456489"
+    assert widget.token_path.endswith("test_token.json")
+    assert widget.agent is not None
+
+
+def test_login_client_id(qtbot: QtBot) -> None:
+    client_id = "12cnfjejsfsdf3456789ab"
+    widget = ONCatLogin(client_id=client_id)
+    qtbot.addWidget(widget)
+    assert widget.client_id == client_id
+    assert widget.token_path.endswith(f"{client_id[0:8]}_token.json")
+
+
+def test_login_client_id_key(qtbot: QtBot) -> None:
+    client_id = "12cnfjejsfsdf3456789ab"
+    key = "test"
+    widget = ONCatLogin(client_id=client_id, key=key)
+    qtbot.addWidget(widget)
+    assert widget.client_id == client_id
+    assert widget.token_path.endswith(f"{key}_token.json")
+
+
+# ---------------------------------------------------------------------------
+# get_agent_instance
+# ---------------------------------------------------------------------------
+
+
+def test_get_agent(qtbot: QtBot) -> None:
+    widget = _make_widget(qtbot)
+    mock_agent = MagicMock()
+    widget.agent = mock_agent
+    assert widget.get_agent_instance() is mock_agent
+
+
+# ---------------------------------------------------------------------------
+# is_connected
+# ---------------------------------------------------------------------------
+
+
+def test_is_connected_no_token(qtbot: QtBot) -> None:
+    """No stored token: return False without any network call."""
+    w = _make_widget(qtbot)
+    mock_agent = MagicMock()
+    mock_agent.has_stored_token.return_value = False
+    w.agent = mock_agent
+    assert w.is_connected is False
+    mock_agent.Facility.list.assert_not_called()
+
+
+def test_is_connected_success(qtbot: QtBot) -> None:
+    w = _make_widget(qtbot)
+    mock_agent = MagicMock()
+    mock_agent.has_stored_token.return_value = True
+    mock_agent.Facility.list.return_value = []
+    w.agent = mock_agent
+    assert w.is_connected is True
+
+
+def test_is_connected_invalid_refresh(qtbot: QtBot) -> None:
+    w = _make_widget(qtbot)
+    mock_agent = MagicMock()
+    mock_agent.has_stored_token.return_value = True
+    mock_agent.Facility.list.side_effect = pyoncat.InvalidRefreshTokenError
+    w.agent = mock_agent
+    assert w.is_connected is False
+
+
+def test_is_connected_interaction_required(qtbot: QtBot) -> None:
+    w = _make_widget(qtbot)
+    mock_agent = MagicMock()
+    mock_agent.has_stored_token.return_value = True
+    mock_agent.Facility.list.side_effect = pyoncat.InteractionRequiredError
+    w.agent = mock_agent
+    assert w.is_connected is False
+
+
+def test_is_connected_login_required(qtbot: QtBot) -> None:
+    w = _make_widget(qtbot)
+    mock_agent = MagicMock()
+    mock_agent.has_stored_token.return_value = True
+    mock_agent.Facility.list.side_effect = pyoncat.LoginRequiredError
+    w.agent = mock_agent
+    assert w.is_connected is False
+
+
+def test_is_connected_other_exception(qtbot: QtBot) -> None:
+    w = _make_widget(qtbot)
+    mock_agent = MagicMock()
+    mock_agent.has_stored_token.return_value = True
+    mock_agent.Facility.list.side_effect = RuntimeError("unexpected")
+    w.agent = mock_agent
+    assert w.is_connected is False
+
+
+def test_is_connected_network_error(qtbot: QtBot) -> None:
+    """A transport-layer failure reports "not connected" without raising."""
+    w = _make_widget(qtbot)
+    mock_agent = MagicMock()
+    mock_agent.has_stored_token.return_value = True
+    mock_agent.Facility.list.side_effect = requests.exceptions.ConnectionError
+    w.agent = mock_agent
+    assert w.is_connected is False
+
+
+# ---------------------------------------------------------------------------
+# connect_to_oncat
+# ---------------------------------------------------------------------------
+
+
+def test_connect_to_oncat_already_connected(qtbot: QtBot) -> None:
+    """A working session skips sign-in and refreshes status."""
+    w = _make_widget(qtbot)
+    mock_agent = MagicMock()
+    mock_agent.has_stored_token.return_value = True
+    mock_agent.Facility.list.return_value = []
+    w.agent = mock_agent
+
+    w.connect_to_oncat()
+
+    assert w._thread is None
+    mock_agent.login.assert_not_called()
+    assert "Connected" in w.status_label.text()
+
+
+def test_connect_to_oncat_starts_sign_in(qtbot: QtBot) -> None:
+    """Not connected: background job is started with agent.login and a cancel_event.
+
+    _run_in_background is patched so the work and callbacks can be driven
+    synchronously, avoiding the PySide6 deleteLater race in QThread cleanup.
+    """
+    w = _make_widget(qtbot)
+    mock_agent = MagicMock()
+    mock_agent.has_stored_token.return_value = False
+    w.agent = mock_agent
+
+    calls = []
+    with patch.object(w, "_run_in_background", side_effect=lambda *a: calls.append(a)):
+        w.connect_to_oncat()
+
+    assert w.oncat_button.isEnabled() is False
+    assert len(calls) == 1
+
+    work, on_success, _on_error = calls[0]
+
+    # work is the lambda passed to login — call it and check the cancel_event arg
+    work()
+    _, kwargs = mock_agent.login.call_args
+    assert isinstance(kwargs.get("cancel_event"), threading.Event)
+
+    # calling on_success simulates the thread completing successfully; a
+    # successful sign-in leaves the widget connected, so the connect button is
+    # disabled and the logout button enabled.
+    on_success(None)
+    assert w.oncat_button.isEnabled() is False
+    assert w.logout_button.isEnabled() is True
+
+
+def test_connect_to_oncat_in_progress_ignored(qtbot: QtBot) -> None:
+    """A second click while a sign-in is running is a no-op."""
+    w = _make_widget(qtbot)
+    mock_agent = MagicMock()
+    w.agent = mock_agent
+    w._thread = MagicMock()  # simulate a sign-in already running
+
+    w.connect_to_oncat()
+
+    mock_agent.has_stored_token.assert_not_called()
+    mock_agent.login.assert_not_called()
+
+
+def test_connect_to_oncat_clears_stale_token(qtbot: QtBot, tmp_path: Path) -> None:
+    """A stale token file is removed before the device flow starts.
+
+    _clear_stored_token is called synchronously in connect_to_oncat before
+    the background thread launches, so we patch _run_in_background to avoid
+    starting a real thread and test only the token-clearing behaviour.
+    """
+    w = _make_widget(qtbot)
+    token_file = tmp_path / "stale_token.json"
+    token_file.write_text('{"access_token": "dead"}')
+    w.token_path = str(token_file)
+
+    mock_agent = MagicMock()
+    mock_agent.has_stored_token.return_value = True
+    mock_agent.Facility.list.side_effect = pyoncat.InvalidRefreshTokenError
+    w.agent = mock_agent
+
+    with patch.object(w, "_run_in_background") as run_bg:
+        w.connect_to_oncat()
+
+    assert not token_file.exists()
+    run_bg.assert_called_once()
+
+
+def test_connect_to_oncat_preserves_token_on_network_error(qtbot: QtBot, tmp_path: Path) -> None:
+    """A transient connectivity failure keeps the token and starts no sign-in.
+
+    Clearing the token on a network blip would force a needless
+    re-authorization once connectivity returns, so the stored token must
+    survive and no interactive sign-in should be launched.
+    """
+    w = _make_widget(qtbot)
+    token_file = tmp_path / "live_token.json"
+    token_file.write_text('{"access_token": "live"}')
+    w.token_path = str(token_file)
+
+    mock_agent = MagicMock()
+    mock_agent.has_stored_token.return_value = True
+    mock_agent.Facility.list.side_effect = requests.exceptions.ConnectionError
+    w.agent = mock_agent
+
+    with patch.object(w, "_run_in_background") as run_bg, patch("pyoncatqt.login.QMessageBox.warning") as warn:
+        w.connect_to_oncat()
+
+    assert token_file.exists()
+    run_bg.assert_not_called()
+    mock_agent.login.assert_not_called()
+    warn.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# _show_verification
+# ---------------------------------------------------------------------------
+
+
+def test_show_verification(qtbot: QtBot) -> None:
+    w = _make_widget(qtbot)
+    challenge = MagicMock()
+    challenge.verification_uri = "https://example.com/auth"
+    challenge.verification_uri_complete = "https://example.com/auth?user_code=ABCD"
+    challenge.user_code = "ABCD"
+
+    w._show_verification(challenge)
+
+    assert isinstance(w.login_dialog, VerificationDialog)
+    assert "Waiting" in w.status_label.text()
+
+    w.login_dialog.resolve()
+    w.login_dialog.close()
+    w.login_dialog = None
+
+
+# ---------------------------------------------------------------------------
+# _on_cancel_requested
+# ---------------------------------------------------------------------------
+
+
+def test_on_cancel_requested(qtbot: QtBot) -> None:
+    w = _make_widget(qtbot)
+    cancel_event = threading.Event()
+    w._cancel_event = cancel_event
+
+    w._on_cancel_requested()
+
+    assert cancel_event.is_set()
+    assert "Cancelling" in w.status_label.text()
+
+
+# ---------------------------------------------------------------------------
+# _on_sign_in_error
+# ---------------------------------------------------------------------------
+
+
+def test_on_sign_in_error_cancelled(qtbot: QtBot) -> None:
+    """DeviceAuthorizationCancelled does not show a warning dialog."""
+    w = _make_widget(qtbot)
+    mock_agent = MagicMock()
+    mock_agent.has_stored_token.return_value = False
+    w.agent = mock_agent
+    w.oncat_button.setEnabled(False)
+
+    with patch("pyoncatqt.login.QMessageBox.warning") as mock_warn:
+        w._on_sign_in_error(pyoncat.DeviceAuthorizationCancelled("cancelled"))
+        mock_warn.assert_not_called()
+
+    assert w.oncat_button.isEnabled() is True
+
+
+def test_on_sign_in_error_shows_messagebox(qtbot: QtBot) -> None:
+    """Any other error shows a QMessageBox warning with the error text."""
+    w = _make_widget(qtbot)
+    mock_agent = MagicMock()
+    mock_agent.has_stored_token.return_value = False
+    w.agent = mock_agent
+    w.oncat_button.setEnabled(False)
+
+    with patch("pyoncatqt.login.QMessageBox.warning") as mock_warn:
+        w._on_sign_in_error(RuntimeError("connection failed"))
+
+    mock_warn.assert_called_once()
+    assert "connection failed" in mock_warn.call_args[0][2]
+    assert w.oncat_button.isEnabled() is True
+
+
+# ---------------------------------------------------------------------------
+# closeEvent / background-job shutdown
+# ---------------------------------------------------------------------------
+
+
+def test_close_stops_active_background_job(qtbot: QtBot) -> None:
+    """Closing the widget while a sign-in is running cancels and joins the thread.
+
+    The worker blocks on its cancel_event, standing in for PyONCat's polling
+    login(); closing the widget must set the cancel event, wait for the thread
+    to finish, and leave no dangling job.
+    """
+    w = _make_widget(qtbot)
+    mock_agent = MagicMock()
+    mock_agent.has_stored_token.return_value = False
+    w.agent = mock_agent
+
+    started = threading.Event()
+
+    def fake_login(cancel_event: threading.Event) -> None:
+        started.set()
+        # Block until closeEvent requests cancellation, like the real poll loop.
+        cancel_event.wait(timeout=5)
+
+    mock_agent.login.side_effect = fake_login
+
+    w.connect_to_oncat()
+    assert started.wait(timeout=2), "background job did not start"
+    assert w._thread is not None
+
+    cancel_event = w._cancel_event
+    w.close()
+
+    # The poll loop was signalled to stop and the thread was joined.
+    assert cancel_event.is_set()
+    qtbot.waitUntil(lambda: w._thread is None, timeout=2000)
+
+
+def test_close_with_no_active_job_is_noop(qtbot: QtBot) -> None:
+    """Closing an idle widget does not raise and leaves no job behind."""
+    w = _make_widget(qtbot)
+    assert w._thread is None
+    w.close()
+    assert w._thread is None
+
+
+def test_app_shutdown_cleans_up_and_blocks_dialog(qtbot: QtBot) -> None:
+    """A parent window / app shutdown tears down the job and blocks the dialog.
+
+    Closing a parent window delivers no closeEvent to this child widget, so
+    cleanup is driven by the application's ``aboutToQuit`` signal instead. It
+    must cancel the poll loop, close any open verification dialog, and reject a
+    challenge that was already queued before shutdown so the dialog cannot
+    reopen on a widget that is going away.
+    """
+    win = QMainWindow()
+    qtbot.addWidget(win)
+    w = ONCatLogin(key="test")
+    win.setCentralWidget(w)
+
+    mock_agent = MagicMock()
+    mock_agent.has_stored_token.return_value = False
+    w.agent = mock_agent
+
+    started = threading.Event()
+
+    def fake_login(cancel_event: threading.Event) -> None:
+        started.set()
+        cancel_event.wait(timeout=5)
+
+    mock_agent.login.side_effect = fake_login
+
+    w.connect_to_oncat()
+    assert started.wait(timeout=2), "background job did not start"
+
+    # A challenge arrives and opens the verification dialog before shutdown.
+    challenge = MagicMock()
+    challenge.verification_uri = "https://example.com/auth"
+    challenge.verification_uri_complete = None
+    challenge.user_code = "ABCD"
+    w._show_verification(challenge)
+    assert w.login_dialog is not None
+
+    cancel_event = w._cancel_event
+    win.show()
+
+    # Simulate the application shutting down as the host window closes.
+    win.close()
+    QApplication.instance().aboutToQuit.emit()
+
+    assert cancel_event.is_set()
+    assert w.login_dialog is None
+    qtbot.waitUntil(lambda: w._thread is None, timeout=2000)
+
+    # A challenge queued before shutdown must not reopen the dialog.
+    w._show_verification(challenge)
+    assert w.login_dialog is None
+
+
+# ---------------------------------------------------------------------------
+# Token persistence
+# ---------------------------------------------------------------------------
+
+
+def test_read_token(qtbot: QtBot, token_path: str) -> None:
+    widget = _make_widget(qtbot)
     widget.token_path = token_path
     test_token = widget.read_token()
     with open(token_path, "r") as f:
@@ -260,12 +576,27 @@ def test_read_token(qtbot: pytest.fixture, token_path: pytest.fixture) -> None:
     assert test_token == actual_token
 
 
-def test_write_token(qtbot: pytest.fixture, token_path: pytest.fixture) -> None:
-    widget = ONCatLogin(key="test")
-    qtbot.addWidget(widget)
+def test_write_token(qtbot: QtBot, token_path: str) -> None:
+    widget = _make_widget(qtbot)
     widget.token_path = token_path
     with open(token_path, "r") as f:
         actual_token = json.load(f)
     widget.write_token(actual_token)
     with open(token_path, "r") as f:
         assert f.read() == json.dumps(actual_token)
+
+
+def test_clear_stored_token(qtbot: QtBot, tmp_path: Path) -> None:
+    widget = _make_widget(qtbot)
+    token_file = tmp_path / "token.json"
+    token_file.write_text('{"access_token": "abc"}')
+    widget.token_path = str(token_file)
+    widget._clear_stored_token()
+    assert not token_file.exists()
+
+
+def test_clear_stored_token_no_file(qtbot: QtBot, tmp_path: Path) -> None:
+    """Calling _clear_stored_token when no file exists does not raise."""
+    widget = _make_widget(qtbot)
+    widget.token_path = str(tmp_path / "nonexistent.json")
+    widget._clear_stored_token()
