@@ -86,7 +86,6 @@ platforms = ["linux-64"]
 channels = [
   "conda-forge",
   "https://prefix.dev/pixi-build-backends",
-  "mantid-ornl",
   "oncat"
 ]
 
@@ -103,15 +102,14 @@ versioningit = "*"
 
 [tool.pixi.package.run-dependencies]
 #dependencies for the conda package - for shiver to run
-mantidqt = ">=6.12"
 pyoncat = ">=2.6"
-oauthlib = "*"
+qtpy = ">=2.4.3"
 
 [tool.pixi.dependencies]
 # Conda package dependencies for the local environment though pixi
-mantidqt = ">=6.12"
 pyoncat = ">=2.6"
-oauthlib = "*"
+qtpy = ">=2.4.3"
+pyqt6 = ">=6.11,<7" # for running tests
 
 [tool.pixi.pypi-dependencies]
 # PyPI dependencies for the local environment though pixi
