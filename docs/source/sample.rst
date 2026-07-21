@@ -19,57 +19,7 @@ The user opens that link in a browser and approves the sign-in with their ORNL c
 password is entered inside the application. Once the sign-in resolves, the widget refreshes its connection
 status and emits ``connection_updated``.
 
-.. code:: python
-
-    from pyoncatqt.login import ONCatLogin
-    from qtpy.QtWidgets import QApplication, QLabel, QListWidget, QVBoxLayout, QWidget
-
-    class MainWindow(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.initUI()
-
-    def initUI(self):
-        layout = QVBoxLayout()
-
-        # Create and add the Oncat widget
-        self.oncat_widget = ONCatLogin(key="client", parent=self)
-        self.oncat_widget.connection_updated.connect(self.update_instrument_lists)
-        layout.addWidget(self.oncat_widget)
-
-        # Add list widgets for the instrument lists
-        self.sns_list = QListWidget()
-        self.hfir_list = QListWidget()
-
-        layout.addWidget(QLabel("SNS Instruments:"))
-        layout.addWidget(self.sns_list)
-        layout.addWidget(QLabel("HFIR Instruments:"))
-        layout.addWidget(self.hfir_list)
-
-        self.setLayout(layout)
-        self.setWindowTitle("ONCat Application")
-        self.oncat_widget.update_connection_status()
-
-    def update_instrument_lists(self, is_connected):
-        """Update the contents of the instrument lists based on the connection status."""
-        self.sns_list.clear()
-        self.hfir_list.clear()
-
-        if is_connected:
-            sns_instruments = self.oncat_widget.agent.Instrument.list(facility="SNS")
-            hfir_instruments = self.oncat_widget.agent.Instrument.list(facility="HFIR")
-
-            for instrument in sns_instruments:
-                self.sns_list.addItem(instrument.get("name"))
-
-            for instrument in hfir_instruments:
-                self.hfir_list.addItem(instrument.get("name"))
-
-    if __name__ == "__main__":
-        app = QApplication(sys.argv)
-        window = MainWindow()
-        window.show()
-        sys.exit(app.exec_())
+.. literalinclude:: sample_usage.py
 
 
 Configuration: ``key`` and ``client_id``
