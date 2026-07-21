@@ -15,10 +15,7 @@ documentation = "https://pyoncatqt.readthedocs.io/en/latest/"
 pyoncatqt = "pyoncatqt.version:get_version"
 
 [build-system]
-requires = [
-  "hatchling",
-  "versioningit"
-]
+requires = ["hatchling", "versioningit"]
 build-backend = "hatchling.build"
 
 [tool.hatch.version]
@@ -53,17 +50,24 @@ distance-dirty = "{next_version}.dev{distance}"
 pythonpath = [".", "src"]
 testpaths = ["tests"]
 python_files = ["test*.py"]
-norecursedirs = [".git", "tmp*", "_tmp*", "__pycache__", "*dataset*", "*data_set*"]
+norecursedirs = [
+  ".git",
+  "tmp*",
+  "_tmp*",
+  "__pycache__",
+  "*dataset*",
+  "*data_set*",
+]
 
 [tool.coverage.report]
 exclude_lines = [
-    "except ImportError:",
-    "except ModuleNotFoundError:",
-    "except pyoncat.LoginRequiredError:",
-    "except pyoncat.InvalidRefreshTokenError:",
-    "except Exception:",
-    "except json.JSONDecodeError:",
-    "except KeyError:",
+  "except ImportError:",
+  "except ModuleNotFoundError:",
+  "except pyoncat.LoginRequiredError:",
+  "except pyoncat.InvalidRefreshTokenError:",
+  "except Exception:",
+  "except json.JSONDecodeError:",
+  "except KeyError:",
 ]
 omit = ["src/pyoncatqt/_version.py"]
 
@@ -74,24 +78,23 @@ exclude = ["tests/data/token.json"]
 [tool.ruff.lint]
 # https://beta.ruff.rs/docs/rules/
 select = ["A", "ARG", "BLE", "E", "F", "I", "PT", "ANN"]
-ignore = ["F403", "F405", "F401", # wild imports and  unknown names
+ignore = [
+  "F403",
+  "F405",
+  "F401", # wild imports and  unknown names
 ]
 
 # ------------------ #
 # Pixi configuration #
 # ------------------ #
 [tool.pixi.workspace]
-preview = ["pixi-build"] # Need this to access pixi-build feature
+preview = ["pixi-build"]                                                      # Need this to access pixi-build feature
 platforms = ["linux-64"]
-channels = [
-  "conda-forge",
-  "https://prefix.dev/pixi-build-backends",
-  "oncat"
-]
+channels = ["conda-forge", "https://prefix.dev/pixi-build-backends", "oncat"]
 
 [tool.pixi.package]
 name = "pyoncatqt"
-version = "0.0.0" # placeholder, can be updated by task sync-version
+version = "0.0.0"  # placeholder, can be updated by task sync-version
 
 [tool.pixi.package.build]
 backend = { name = "pixi-build-python", version = "*" }
@@ -118,7 +121,12 @@ pyoncatqt = { path = ".", editable = true }
 
 [tool.pixi.environments]
 #environment definitions with feature dependencies
-default = { features = ["package", "developer","docs","test",], solve-group = "default" }
+default = { features = [
+  "package",
+  "developer",
+  "docs",
+  "test",
+], solve-group = "default" }
 
 [tool.pixi.feature.package.dependencies]
 #conda package
@@ -162,12 +170,12 @@ test = { description = "Run the test suite", cmd = "pytest" }
 # Packaging
 conda-build-command = { cmd = "pixi build", description = "Wrapper for building the conda package - used by `conda-build`" }
 conda-build = { description = "Build the conda package", depends-on = [
-    "sync-version",
-    "conda-build-command",
-    "reset-version",
+  "sync-version",
+  "conda-build-command",
+  "reset-version",
 ] }
 conda-publish = { cmd = "anaconda upload *.conda", description = "Publish the .conda package to anaconda.org", depends-on = [
-    "conda-build",
+  "conda-build",
 ] }
 # Misc
 audit-deps = { cmd = "pip-audit --local -s osv", description = "Audit the package dependencies for vulnerabilities" }
@@ -175,9 +183,9 @@ clean = { cmd = 'rm -rf .pytest_cache .ruff_cache **/*.egg-info **/dist **/__pyc
 clean-conda = { cmd = "rm -f *.conda", description = "Clean the local .conda build artifacts" }
 clean-docs = { cmd = "rm -rf docs/_build", description = "Clean up documentation build artifacts" }
 clean-all = { description = "Clean all artifacts", depends-on = [
-    "clean",
-    "clean-conda",
-    "clean-docs",
+  "clean",
+  "clean-conda",
+  "clean-docs",
 ] }
 sync-version = { cmd = 'version=$(python -m versioningit); toml set tool.pixi.package.version "$version" --toml-path pyproject.toml', description = "Sync pyproject.toml version with Git version" }
 reset-version = { cmd = "toml set tool.pixi.package.version \"0.0.0\" --toml-path pyproject.toml", description = "Reset the package version to 0.0.0" }
