@@ -125,6 +125,16 @@ class VerificationDialog(QDialog):
         link_label.setOpenExternalLinks(True)
         layout.addWidget(link_label)
         layout.addWidget(QLabel(f"If asked for a code, enter:  {user_code}"))
+        # The line breaks are explicit rather than word-wrapped: a wrapped label
+        # reports its height through heightForWidth, which the dialog does not
+        # resolve before it is first shown, so it opens too short to read. Hard
+        # breaks give the label an exact size hint in both directions.
+        note_label = QLabel(
+            "If the webpage to confirm the activation shows your 3\n"
+            "character U/XCAMS ID instead of the 8 character unique ID,\n"
+            "you should be able to continue and click confirm."
+        )
+        layout.addWidget(note_label)
 
         self._resolved = False
         self.button_cancel = QPushButton("Cancel")
