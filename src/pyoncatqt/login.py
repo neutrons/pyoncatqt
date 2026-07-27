@@ -126,9 +126,9 @@ class VerificationDialog(QDialog):
         layout.addWidget(link_label)
         layout.addWidget(QLabel(f"If asked for a code, enter:  {user_code}"))
         note_label = QLabel(
-            "If the webpage to confirm the activation shows your 3\n"
-            "character U/XCAMS ID instead of the 8 character unique ID,\n"
-            "you should be able to continue and click confirm."
+            "If the webpage to confirm the activation shows your\n"
+            "XCAMS ID instead of the code listed above, you should\n"
+            "be able to continue and click confirm."
         )
         layout.addWidget(note_label)
 
